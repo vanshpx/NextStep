@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { computeActivityOrder } from '@/lib/sortActivities';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
     request: Request,
@@ -17,7 +20,9 @@ export async function GET(
                 hotelStays: true,
                 itineraryDays: {
                     include: {
-                        activities: true,
+                        activities: {
+                            orderBy: { order: 'asc' },
+                        },
                     },
                 },
             },
@@ -28,24 +33,27 @@ export async function GET(
         }
 
         // Map to frontend interface
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const it = itinerary as any;
         const mappedItinerary = {
-            id: itinerary.id,
-            c: itinerary.client,
-            d: itinerary.destination,
-            s: itinerary.status,
-            status: itinerary.status,
-            date: itinerary.dateRange,
-            flights: itinerary.flights,
-            hotelStays: itinerary.hotelStays,
-            age: itinerary.age,
-            days: itinerary.days,
-            email: itinerary.email,
-            mobile: itinerary.mobile,
-            origin: itinerary.origin,
-            from: itinerary.from,
-            to: itinerary.to,
-            totalDays: itinerary.totalDays,
-            itineraryDays: itinerary.itineraryDays.map((day) => ({
+            id: it.id,
+            c: it.client,
+            d: it.destination,
+            s: it.status,
+            status: it.status,
+            date: it.dateRange,
+            flights: it.flights,
+            hotelStays: it.hotelStays,
+            age: it.age,
+            days: it.days,
+            email: it.email,
+            mobile: it.mobile,
+            origin: it.origin,
+            from: it.from,
+            to: it.to,
+            totalDays: it.totalDays,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            itineraryDays: it.itineraryDays.map((day: any) => ({
                 id: day.id,
                 dayNumber: day.dayNumber,
                 activities: day.activities,
@@ -87,23 +95,33 @@ export async function PATCH(
         const body = await request.json();
 
         // Separate relations from scalar fields
+        // The form sends short keys (c, d, s, date) — accept both naming conventions
         const {
             itineraryDays, flights, hotelStays,
-            client, destination, dateRange, status,
+            // Short keys (sent by itinerary builder form)
+            c, d, s, date,
+            // Long keys (direct API usage / disruption updates / etc.)
+            client: clientLong, destination: destinationLong, dateRange, status: statusLong,
+            // Detail fields
             progress, age, days, email, mobile, origin, from, to, totalDays,
-
         } = body;
+
+        // Resolve with short keys taking priority over long keys
+        const resolvedClient = c ?? clientLong;
+        const resolvedDestination = d ?? destinationLong;
+        const resolvedStatus = s ?? statusLong;
+        const resolvedDateRange = date ?? dateRange;
 
         // Use transaction to ensure consistency
         const updatedItinerary = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-            // 1. Update main itinerary fields - use update with explicit data object
+            // 1. Update main itinerary fields
             await tx.itinerary.update({
                 where: { id: parseInt(id) },
                 data: {
-                    client,
-                    destination,
-                    dateRange,
-                    status,
+                    client: resolvedClient,
+                    destination: resolvedDestination,
+                    dateRange: resolvedDateRange,
+                    status: resolvedStatus,
                     progress,
                     age,
                     days,
@@ -116,7 +134,7 @@ export async function PATCH(
                 },
             });
 
-            // 2. Handle Flights (Delete All -> Create New is easiest for now)
+            // 2. Handle Flights (Delete All -> Create New)
             if (flights && Array.isArray(flights)) {
                 await tx.flight.deleteMany({ where: { itineraryId: parseInt(id) } });
                 if (flights.length > 0) {
@@ -155,35 +173,44 @@ export async function PATCH(
                 }
             }
 
-            // 4. If itineraryDays provided, replace them
+            // 4. Replace itinerary days with atomically ordered activities
             if (itineraryDays && Array.isArray(itineraryDays)) {
+                // Delete all existing days (cascades to activities)
                 await tx.day.deleteMany({
                     where: { itineraryId: parseInt(id) },
                 });
 
+                // Recreate each day, computing server-side chronological order
                 for (const day of itineraryDays) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const orderedActivities = computeActivityOrder(day.activities ?? []) as any[];
+
                     await tx.day.create({
                         data: {
                             dayNumber: day.dayNumber || day.day,
                             itineraryId: parseInt(id),
                             activities: {
-                                create: day.activities.map((act: Prisma.ActivityCreateWithoutDayInput) => ({
-                                    time: act.time,
-                                    duration: act.duration,
-                                    title: act.title,
-                                    location: act.location,
-                                    notes: act.notes,
-                                    status: act.status || 'upcoming',
-                                    lat: act.lat,
-                                    lng: act.lng
-                                })),
+                                create: orderedActivities.map(
+                                    (act: Prisma.ActivityCreateWithoutDayInput & { order: number }) => ({
+                                        time: act.time,
+                                        duration: act.duration,
+                                        title: act.title,
+                                        location: act.location,
+                                        notes: act.notes,
+                                        status: act.status || 'upcoming',
+                                        lat: act.lat,
+                                        lng: act.lng,
+                                        order: act.order,
+                                    })
+                                ),
                             },
                         },
                     });
                 }
             }
 
-            // 5. Fetch full updated itinerary to return
+            // 5. Fetch full updated itinerary — activities already in order due to
+            // ORDER BY on the query and the order values we just wrote.
             return await tx.itinerary.findUnique({
                 where: { id: parseInt(id) },
                 include: {
@@ -191,7 +218,9 @@ export async function PATCH(
                     hotelStays: true,
                     itineraryDays: {
                         include: {
-                            activities: true,
+                            activities: {
+                                orderBy: { order: 'asc' },
+                            },
                         },
                     },
                 },
@@ -202,18 +231,31 @@ export async function PATCH(
             return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 });
         }
 
-        // Map to frontend interface
+        // Map to frontend interface — must include ALL fields so the context
+        // (which replaces its in-memory entry with this response) never loses
+        // detail fields like origin/from/to after a save.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ui = updatedItinerary as any;
         const mappedItinerary = {
-            id: updatedItinerary.id,
-            c: updatedItinerary.client,
-            d: updatedItinerary.destination,
-            s: updatedItinerary.status,
-            status: updatedItinerary.status,
-            date: updatedItinerary.dateRange,
-            flights: updatedItinerary.flights,
-            hotelStays: updatedItinerary.hotelStays,
-            // ... other fields
-            itineraryDays: updatedItinerary.itineraryDays.map((day) => ({
+            id: ui.id,
+            c: ui.client,
+            d: ui.destination,
+            s: ui.status,
+            status: ui.status,
+            date: ui.dateRange,
+            // Detail fields — must be present so builder form re-hydrates correctly
+            age: ui.age,
+            days: ui.days,
+            email: ui.email,
+            mobile: ui.mobile,
+            origin: ui.origin,
+            from: ui.from,
+            to: ui.to,
+            totalDays: ui.totalDays,
+            flights: ui.flights,
+            hotelStays: ui.hotelStays,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            itineraryDays: ui.itineraryDays.map((day: any) => ({
                 id: day.id,
                 dayNumber: day.dayNumber,
                 activities: day.activities,

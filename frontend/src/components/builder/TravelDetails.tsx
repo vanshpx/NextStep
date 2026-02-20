@@ -14,6 +14,9 @@ interface TravelInfo {
     arrivalTime: string;
     lat?: number;
     lng?: number;
+    arrivalAirport?: string;
+    arrivalLat?: number;
+    arrivalLng?: number;
 }
 
 interface TravelDetailsProps {
@@ -45,7 +48,7 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
 
                     <AutocompleteInput
                         label="Departure Airport / Station"
-                        placeholder="Search Airport..."
+                        placeholder="Search Origin..."
                         data={airports}
                         value={departure.airport}
                         onChange={(val, loc) => {
@@ -62,7 +65,7 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                         <label className="text-sm font-medium text-gray-700">Date</label>
                         <Input
                             type="date"
-                            value={departure.date}
+                            value={departure.date ?? ""}
                             onChange={(e) => onChange('departure', 'date', e.target.value)}
                             disabled={disabledDeparture}
                         />
@@ -72,14 +75,14 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                         <Input
                             label="Airline / Train"
                             placeholder="e.g. Emirates"
-                            value={departure.airline}
+                            value={departure.airline ?? ""}
                             onChange={(e) => onChange('departure', 'airline', e.target.value)}
                             disabled={disabledDeparture}
                         />
                         <Input
                             label="Flight / Train No."
                             placeholder="e.g. EK501"
-                            value={departure.flightNumber}
+                            value={departure.flightNumber ?? ""}
                             onChange={(e) => onChange('departure', 'flightNumber', e.target.value)}
                             disabled={disabledDeparture}
                         />
@@ -89,14 +92,14 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                         <Input
                             label="Departure Time"
                             type="time"
-                            value={departure.departureTime}
+                            value={departure.departureTime ?? ""}
                             onChange={(e) => onChange('departure', 'departureTime', e.target.value)}
                             disabled={disabledDeparture}
                         />
                         <Input
                             label="Arrival Time"
                             type="time"
-                            value={departure.arrivalTime}
+                            value={departure.arrivalTime ?? ""}
                             onChange={(e) => onChange('departure', 'arrivalTime', e.target.value)}
                             disabled={disabledDeparture}
                         />
@@ -132,7 +135,7 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                         <label className="text-sm font-medium text-gray-700">Date</label>
                         <Input
                             type="date"
-                            value={returnTrip.date}
+                            value={returnTrip.date ?? ""}
                             onChange={(e) => onChange('return', 'date', e.target.value)}
                             disabled={disabledReturn}
                         />
@@ -142,14 +145,14 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                         <Input
                             label="Airline / Train"
                             placeholder="e.g. Emirates"
-                            value={returnTrip.airline}
+                            value={returnTrip.airline ?? ""}
                             onChange={(e) => onChange('return', 'airline', e.target.value)}
                             disabled={disabledReturn}
                         />
                         <Input
                             label="Flight / Train No."
                             placeholder="e.g. EK502"
-                            value={returnTrip.flightNumber}
+                            value={returnTrip.flightNumber ?? ""}
                             onChange={(e) => onChange('return', 'flightNumber', e.target.value)}
                             disabled={disabledReturn}
                         />
@@ -159,14 +162,14 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                         <Input
                             label="Departure Time"
                             type="time"
-                            value={returnTrip.departureTime}
+                            value={returnTrip.departureTime ?? ""}
                             onChange={(e) => onChange('return', 'departureTime', e.target.value)}
                             disabled={disabledReturn}
                         />
                         <Input
                             label="Arrival Time"
                             type="time"
-                            value={returnTrip.arrivalTime}
+                            value={returnTrip.arrivalTime ?? ""}
                             onChange={(e) => onChange('return', 'arrivalTime', e.target.value)}
                             disabled={disabledReturn}
                         />

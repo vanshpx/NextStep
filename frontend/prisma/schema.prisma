@@ -83,6 +83,7 @@ model Activity {
   status    String  // completed, current, upcoming, issue
   lat       Float?
   lng       Float?
+  order     Int     @default(0)  // Chronological position within the day (1-based)
   
   dayId     Int
   day       Day     @relation(fields: [dayId], references: [id], onDelete: Cascade)

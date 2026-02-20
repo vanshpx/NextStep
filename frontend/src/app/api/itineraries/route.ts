@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { computeActivityOrder } from '@/lib/sortActivities';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
@@ -10,7 +13,9 @@ export async function GET() {
                 hotelStays: true,
                 itineraryDays: {
                     include: {
-                        activities: true,
+                        activities: {
+                            orderBy: { order: 'asc' },
+                        },
                     },
                 },
             },
@@ -19,6 +24,7 @@ export async function GET() {
             },
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mappedItineraries = itineraries.map((it: any) => ({
             id: it.id,
             c: it.client,
@@ -26,10 +32,20 @@ export async function GET() {
             s: it.status,
             status: it.status,
             date: it.dateRange,
+            // Detail fields — required by client view page and builder
+            age: it.age,
+            days: it.days,
+            email: it.email,
+            mobile: it.mobile,
+            origin: it.origin,
+            from: it.from,
+            to: it.to,
+            totalDays: it.totalDays,
             flights: it.flights,
             hotelStays: it.hotelStays,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             itineraryDays: it.itineraryDays.map((d: any) => ({
+                id: d.id,
                 dayNumber: d.dayNumber,
                 activities: d.activities,
             })),
@@ -73,7 +89,7 @@ export async function POST(request: Request) {
                         date: f.date,
                         airline: f.airline,
                         flightNumber: f.flightNumber,
-                        flightTime: f.flightTime, // map
+                        flightTime: f.flightTime,
                         arrivalTime: f.arrivalTime,
                         airport: f.airport,
                         lat: f.lat,
@@ -93,22 +109,28 @@ export async function POST(request: Request) {
                 },
 
                 itineraryDays: {
-                    create: itineraryDays?.map((day: any, index: number) => ({
-                        dayNumber: day.dayNumber || index + 1,
-                        activities: {
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            create: day.activities?.map((act: any) => ({
-                                time: act.time,
-                                duration: act.duration,
-                                title: act.title,
-                                location: act.location,
-                                notes: act.notes,
-                                status: act.status || 'upcoming',
-                                lat: act.lat,
-                                lng: act.lng,
-                            })) || [],
-                        },
-                    })) || [],
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    create: itineraryDays?.map((day: any, index: number) => {
+                        // Compute server-side chronological order before inserting
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const orderedActivities = computeActivityOrder(day.activities ?? []) as any[];
+                        return {
+                            dayNumber: day.dayNumber || index + 1,
+                            activities: {
+                                create: orderedActivities.map((act) => ({
+                                    time: act.time,
+                                    duration: act.duration,
+                                    title: act.title,
+                                    location: act.location,
+                                    notes: act.notes,
+                                    status: act.status || 'upcoming',
+                                    lat: act.lat,
+                                    lng: act.lng,
+                                    order: act.order,
+                                })),
+                            },
+                        };
+                    }) || [],
                 },
             },
             include: {
@@ -116,7 +138,9 @@ export async function POST(request: Request) {
                 hotelStays: true,
                 itineraryDays: {
                     include: {
-                        activities: true,
+                        activities: {
+                            orderBy: { order: 'asc' },
+                        },
                     },
                 },
             },

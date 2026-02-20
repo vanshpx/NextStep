@@ -21,9 +21,11 @@ interface DayBuilderProps {
     onChange: (days: Day[]) => void;
     startDate?: string;
     stays?: Stay[];
+    isActive?: boolean;
+    isCompleted?: boolean;
 }
 
-export default function DayBuilder({ days, onChange, startDate, stays = [] }: DayBuilderProps) {
+export default function DayBuilder({ days, onChange, startDate, stays = [], isActive = false, isCompleted = false }: DayBuilderProps) {
     const addDay = () => {
         onChange([...days, { id: generateId(), activities: [] }]);
     };
@@ -61,15 +63,23 @@ export default function DayBuilder({ days, onChange, startDate, stays = [] }: Da
         onChange(newDays);
     };
 
-    const updateActivity = (dayIndex: number, activityId: number, field: string, value: string | number | undefined) => {
+    const updateActivity = (dayIndex: number, activityId: number, updates: Partial<Activity>) => {
         const newDays = [...days];
         newDays[dayIndex] = {
             ...newDays[dayIndex],
             activities: newDays[dayIndex].activities.map(a =>
-                a.id === activityId ? { ...a, [field]: value } : a
+                a.id === activityId ? { ...a, ...updates } : a
             )
         };
         onChange(newDays);
+    };
+
+    const isActivityLocked = (dayIndex: number, activity: Activity) => {
+        if (isCompleted) return true;
+
+        // User requested to UNLOCK activities for active itineraries.
+        // All activities are editable unless the itinerary is strictly Completed.
+        return false;
     };
 
     const getDayInfo = (index: number) => {
@@ -129,7 +139,7 @@ export default function DayBuilder({ days, onChange, startDate, stays = [] }: Da
                                             </div>
                                         )}
                                     </div>
-                                    {days.length > 1 && (
+                                    {days.length > 1 && !isCompleted && !isActive && (
                                         <Button variant="ghost" size="sm" onClick={() => removeDay(day.id)} className="text-red-500 hover:bg-red-50 hover:text-red-700">
                                             <Trash className="w-4 h-4 mr-2" />
                                             Remove Day
@@ -139,43 +149,26 @@ export default function DayBuilder({ days, onChange, startDate, stays = [] }: Da
 
                                 <div className="p-6 space-y-4">
                                     {day.activities.map((activity) => {
-                                        // Calculate if activity is in the past
-                                        let isPast = false;
-                                        if (startDate) {
-                                            const actDate = new Date(startDate);
-                                            actDate.setDate(actDate.getDate() + dayIndex);
-                                            // If activity has time, set it
-                                            // If activity has time, set it
-                                            if (activity.time) {
-                                                const [h, m] = activity.time.split(':').map(Number);
-                                                actDate.setHours(h, m);
-                                            } else {
-                                                // If no time is set, assume it's for the whole day / end of day
-                                                // This ensures it doesn't get locked immediately if it's the current day
-                                                actDate.setHours(23, 59, 59, 999);
-                                            }
-
-                                            // Compare with NOW
-                                            if (actDate < new Date()) {
-                                                isPast = true;
-                                            }
-                                        }
+                                        // Calculate if activity is locked
+                                        const isLocked = isActivityLocked(dayIndex, activity);
 
                                         return (
                                             <ActivityBlock
                                                 key={activity.id}
                                                 activity={activity}
-                                                onChange={(field, value) => updateActivity(dayIndex, activity.id, field, value)}
+                                                onUpdate={(updates) => updateActivity(dayIndex, activity.id, updates)}
                                                 onRemove={() => removeActivity(dayIndex, activity.id)}
-                                                readOnly={isPast}
+                                                readOnly={isLocked}
                                             />
                                         );
                                     })}
 
-                                    <Button variant="outline" onClick={() => addActivity(dayIndex)} className="w-full border-dashed border-gray-300 hover:border-primary-500 hover:text-primary-600 hover:bg-primary-50/50">
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Add Activity
-                                    </Button>
+                                    {!isCompleted && (
+                                        <Button variant="outline" onClick={() => addActivity(dayIndex)} className="w-full border-dashed border-gray-300 hover:border-primary-500 hover:text-primary-600 hover:bg-primary-50/50">
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Add Activity
+                                        </Button>
+                                    )}
                                 </div>
                             </motion.div>
                         );
@@ -183,10 +176,12 @@ export default function DayBuilder({ days, onChange, startDate, stays = [] }: Da
                 </AnimatePresence>
             </div>
 
-            <Button onClick={addDay} size="lg" className="w-full py-8 text-lg font-medium bg-white text-gray-900 hover:bg-gray-50 border border-gray-200 hover:border-primary-500 shadow-sm transition-all hover:text-primary-700">
-                <Plus className="w-6 h-6 mr-2" />
-                Add Another Day
-            </Button>
+            {!isCompleted && !isActive && (
+                <Button onClick={addDay} size="lg" className="w-full py-8 text-lg font-medium bg-white text-gray-900 hover:bg-gray-50 border border-gray-200 hover:border-primary-500 shadow-sm transition-all hover:text-primary-700">
+                    <Plus className="w-6 h-6 mr-2" />
+                    Add Another Day
+                </Button>
+            )}
         </div>
     );
 }

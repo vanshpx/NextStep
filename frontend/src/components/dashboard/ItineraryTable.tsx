@@ -194,7 +194,7 @@ export default function ItineraryTable({ title = "Recent Itineraries", showViewA
                                                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Destination</div>
                                                     <div className="flex items-center gap-2 text-sm text-gray-900 mt-2">
                                                         <div className="flex items-center gap-4">
-                                                            <span className="font-medium">{item.origin || "Origin"}</span>
+                                                            <span className="font-medium">{item.origin || item.from || "—"}</span>
                                                             <span className="text-gray-400 text-xs">TO</span>
                                                             <span className="font-medium">{item.d}</span>
                                                         </div>

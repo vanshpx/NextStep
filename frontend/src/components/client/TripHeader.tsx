@@ -1,15 +1,18 @@
 "use client";
 
+import { Itinerary } from "@prisma/client";
+
 interface TripHeaderProps {
     clientName: string;
     from: string;
     to: string;
     totalDays: number;
     currentDay: number;
+    status: Itinerary['status'];
 }
 
-export default function TripHeader({ clientName, from, to, totalDays, currentDay }: TripHeaderProps) {
-    const progress = (currentDay / totalDays) * 100;
+export default function TripHeader({ clientName, from, to, totalDays, currentDay, status }: TripHeaderProps) {
+    const progress = (status === 'Draft' || status === 'Upcoming') ? 0 : (currentDay / totalDays) * 100;
 
     return (
         <div className="bg-navy-900 border-b border-white/5 pb-6 pt-12 px-6 sticky top-0 z-30 shadow-xl">

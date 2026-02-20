@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useItinerary, Itinerary } from "@/context/ItineraryContext";
 
@@ -30,6 +30,21 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
         days: initialData?.days ? initialData.days.toString() : ""
     });
 
+    // Sync state when switching itineraries (based on ID)
+    useEffect(() => {
+        if (initialData) {
+            setClientDetails({
+                clientName: initialData.c || "",
+                age: initialData.age ? initialData.age.toString() : "",
+                contact: initialData.mobile || "",
+                origin: initialData.origin || "",
+                destination: initialData.d || "",
+                days: initialData.days ? initialData.days.toString() : ""
+            });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialData?.id]);
+
     const [travelDetails, setTravelDetails] = useState(() => {
         if (initialData) {
             // Fallback for old JSON data
@@ -44,7 +59,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                         departure: parsed.departure || { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" },
                         returnTrip: parsed.returnTrip || { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" }
                     };
-                } catch (e) {
+                } catch {
                     // ignore
                 }
             }
@@ -75,7 +90,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                 try {
                     const parsed = typeof legacyData.hotelDetails === 'string' ? JSON.parse(legacyData.hotelDetails) : legacyData.hotelDetails;
                     if (Array.isArray(parsed)) return parsed;
-                } catch (e) { /* ignore */ }
+                } catch { /* ignore */ }
             }
             if (initialData.hotelStays && initialData.hotelStays.length > 0) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,8 +123,13 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
     // Sync days count effect removed to avoid cascading renders.
     // Instead, we update clientDetails.days whenever we update the days array (e.g. in addDay/removeDay via a handler).
 
+    // Status Checks
+    const isCompleted = initialData?.status === 'Completed';
+    const isActive = initialData?.status === 'Active';
+    const isUpcoming = initialData?.status === 'Upcoming';
+
     // Conditional Logic for "Middle Stage"
-    const isDeparturePassed = (() => {
+    const isDeparturePassed = isActive || (() => {
         if (!travelDetails.departure.date) return false;
         const date = new Date(travelDetails.departure.date);
         // If has time, add it
@@ -120,15 +140,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
         return date < new Date();
     })();
 
-    const isReturnPassed = (() => {
-        if (!travelDetails.returnTrip.date) return false;
-        const date = new Date(travelDetails.returnTrip.date);
-        if (travelDetails.returnTrip.departureTime) {
-            const [h, m] = travelDetails.returnTrip.departureTime.split(':').map(Number);
-            date.setHours(h, m);
-        }
-        return date < new Date();
-    })();
+    const isReturnPassed = false; // Always editable as per request
 
 
     // --- Handlers ---
@@ -171,7 +183,12 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             const newDays = [...days];
 
             // 1. Arrival Logic (Day 1)
-            if (updated.departure.airport && updated.departure.arrivalTime) {
+            // Use arrivalAirport if available, otherwise fallback to airport (origin) which is wrong but fallback
+            const targetAirport = updated.departure.arrivalAirport || updated.departure.airport;
+            const targetLat = updated.departure.arrivalLat ?? updated.departure.lat;
+            const targetLng = updated.departure.arrivalLng ?? updated.departure.lng;
+
+            if (targetAirport && updated.departure.arrivalTime) {
                 const day1 = newDays[0];
                 if (day1) {
                     const hasArrival = day1.activities.some(a => a.title.startsWith("Arrival at"));
@@ -180,11 +197,11 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                             id: Date.now() + Math.floor(Math.random() * 1000),
                             time: updated.departure.arrivalTime,
                             duration: 0.5,
-                            title: `Arrival at ${updated.departure.airport}`,
-                            location: updated.departure.airport,
+                            title: `Arrival at ${targetAirport}`,
+                            location: targetAirport,
                             notes: `Flight: ${updated.departure.airline} ${updated.departure.flightNumber}`,
-                            lat: updated.departure.lat,
-                            lng: updated.departure.lng,
+                            lat: targetLat,
+                            lng: targetLng,
                             status: 'upcoming'
                         });
 
@@ -258,14 +275,19 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             return;
         }
 
-        // Determine status based on date
+        // Determine status based on date — never mutate Upcoming/Disrupted
         let finalStatus: Itinerary['status'] = status;
-        if (status === 'Active') {
+
+        if (isEditing && isUpcoming) {
+            // Upcoming itinerary edits must keep status unchanged
+            finalStatus = 'Upcoming';
+        } else if (isEditing && initialData?.status === 'Disrupted') {
+            finalStatus = 'Disrupted';
+        } else if (status === 'Active') {
             if (travelDetails.departure.date) {
                 const startDate = new Date(travelDetails.departure.date);
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-
                 if (startDate > today) {
                     finalStatus = 'Upcoming';
                 }
@@ -274,7 +296,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
 
         // Construct Flights Array
         const flights = [];
-        if (travelDetails.departure.date || travelDetails.departure.airport) {
+        if (travelDetails.departure.date || travelDetails.departure.airport || travelDetails.departure.arrivalAirport) {
             flights.push({
                 type: 'Departure',
                 date: travelDetails.departure.date,
@@ -301,6 +323,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             });
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const newItinerary: any = {
             c: clientDetails.clientName,
             d: clientDetails.destination,
@@ -313,8 +336,8 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             days: clientDetails.days ? parseInt(clientDetails.days) : undefined,
             mobile: clientDetails.contact,
             origin: clientDetails.origin,
-            from: travelDetails.departure.airport || clientDetails.origin,
-            to: travelDetails.returnTrip.airport || clientDetails.destination,
+            from: clientDetails.origin || travelDetails.departure.airport,
+            to: clientDetails.destination || travelDetails.returnTrip.airport,
             totalDays: clientDetails.days ? parseInt(clientDetails.days) : undefined,
 
             // New Relations
@@ -353,8 +376,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
         }
     };
 
-    const isCompleted = initialData?.status === 'Completed';
-    const isActive = initialData?.status === 'Active';
+
 
     if (isCompleted) {
         // Read-only view logic could be handled here or by disabling inputs
@@ -366,13 +388,19 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-900">{isEditing ? 'Edit Itinerary' : 'Create New Itinerary'}</h1>
                 <div className="flex gap-4">
-                    {!isActive && !isCompleted && (
-                        <Button variant="outline" onClick={() => handleSave('Draft')} disabled={isCompleted}>
+                    {/* Draft: Save Draft + Finalize. Upcoming: Update only. Active/Completed: handled below. */}
+                    {!isActive && !isUpcoming && !isCompleted && (
+                        <Button variant="outline" onClick={() => handleSave('Draft')}>
                             <Save className="w-4 h-4 mr-2" />
                             Save Draft
                         </Button>
                     )}
-                    {!isCompleted ? (
+                    {isUpcoming ? (
+                        <Button className="bg-primary-600 hover:bg-primary-700 text-white" onClick={() => handleSave('Active')}>
+                            <Save className="w-4 h-4 mr-2" />
+                            Update Itinerary
+                        </Button>
+                    ) : !isCompleted ? (
                         <Button className="bg-primary-600 hover:bg-primary-700 text-white" onClick={() => handleSave('Active')}>
                             <Send className="w-4 h-4 mr-2" />
                             {isEditing && isActive ? 'Update Itinerary' : 'Finalize Itinerary'}
@@ -385,7 +413,11 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                 </div>
             </div>
 
-            <ClientDetailsForm formData={clientDetails} onChange={handleClientChange} />
+            <ClientDetailsForm
+                formData={clientDetails}
+                onChange={handleClientChange}
+                readOnly={isActive || isCompleted}
+            />
 
             <TravelDetails
                 departure={travelDetails.departure}
@@ -408,6 +440,8 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                 }}
                 startDate={travelDetails.departure.date}
                 stays={stays}
+                isActive={isActive}
+                isCompleted={isCompleted}
             />
         </div>
     );

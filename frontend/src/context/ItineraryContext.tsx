@@ -90,7 +90,7 @@ export function ItineraryProvider({ children }: { children: ReactNode }) {
     const fetchItineraries = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch('/api/itineraries');
+            const response = await fetch('/api/itineraries', { cache: 'no-store' });
             if (response.ok) {
                 const data = await response.json();
 

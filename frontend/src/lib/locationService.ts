@@ -7,6 +7,10 @@ export async function searchLocations(query: string): Promise<LocationData[]> {
     if (!query || query.length < 2) return [];
 
     try {
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
         const url = `${NOMINATIM_BASE_URL}?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`;
 
         const response = await fetch(url, {
@@ -14,11 +18,15 @@ export async function searchLocations(query: string): Promise<LocationData[]> {
                 'Accept-Language': 'en-US,en;q=0.5',
                 // Proper etiquette for OSM Nominatim usage
                 'User-Agent': 'ItineraryBuilderApp/1.0'
-            }
+            },
+            signal: controller.signal
         });
 
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-            throw new Error(`Location search failed: ${response.statusText}`);
+            console.warn(`Location search failed with status: ${response.status}`);
+            return [];
         }
 
         const data = await response.json();
@@ -46,7 +54,8 @@ export async function searchLocations(query: string): Promise<LocationData[]> {
         });
 
     } catch (error) {
-        console.error("Error searching locations:", error);
+        // Gracefully handle network errors (e.g. offline, timeout)
+        console.warn("Error searching locations:", error);
         return [];
     }
 }

@@ -113,7 +113,7 @@ export default function HotelStays({ stays, onChange }: HotelStaysProps) {
                                     <AutocompleteInput
                                         label="Hotel Name"
                                         placeholder="Search Hotel (Global)..."
-                                        onSearch={searchLocations}
+                                        placeTypes={['lodging']}
                                         value={stay.hotelName}
                                         onChange={(val, loc) => {
                                             updateStay(stay.id, 'hotelName', val);

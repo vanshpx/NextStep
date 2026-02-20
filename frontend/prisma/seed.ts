@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { computeActivityOrder } from '../src/lib/sortActivities';
 
 const prisma = new PrismaClient();
 
@@ -371,20 +372,27 @@ const itineraries = [
 
 async function main() {
     console.log('Cleaning existing data...');
-    // Delete in reverse order of dependency
-    // Cascade delete handles Flight and HotelStay when Itinerary is deleted
     await prisma.activity.deleteMany({});
     await prisma.day.deleteMany({});
     await prisma.itinerary.deleteMany({});
 
-    console.log('Seeding data...');
+    console.log('Seeding data with computed activity order...');
 
     for (const itinerary of itineraries) {
-        const result = await prisma.itinerary.create({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            data: itinerary as any
-        });
-        console.log(`Created itinerary with id: ${result.id}`);
+        // Deep-clone to avoid mutating the const above
+        const data = JSON.parse(JSON.stringify(itinerary));
+
+        // Compute server-side chronological order for each day's activities
+        if (data.itineraryDays?.create) {
+            for (const day of data.itineraryDays.create) {
+                if (day.activities?.create?.length) {
+                    day.activities.create = computeActivityOrder(day.activities.create);
+                }
+            }
+        }
+
+        const result = await prisma.itinerary.create({ data });
+        console.log(`Created itinerary id=${result.id} (${data.client})`);
     }
     console.log('Seeding finished.');
 }

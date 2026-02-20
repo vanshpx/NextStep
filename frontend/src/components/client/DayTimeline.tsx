@@ -23,7 +23,7 @@ export default function DayTimeline() {
     const [activities, setActivities] = useState(initialActivities);
     const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
 
-    const handleReport = (_type: string) => {
+    const handleReport = () => {
         if (selectedActivityId) {
             setActivities(activities.map(a =>
                 a.id === selectedActivityId ? { ...a, status: "issue" } : a
