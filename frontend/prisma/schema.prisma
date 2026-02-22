@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Itinerary {
+  id            Int           @id @default(autoincrement())
+  client        String
+  destination   String
+  dateRange     String
+  status        String        @default("Draft")
+  progress      Int?
+  age           String?
+  days          String?
+  email         String?
+  mobile        String?
+  origin        String?
+  from          String?
+  to            String?
+  totalDays     Int?
+  agentName     String?
+  agentPhone    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  flights       Flight[]
+  hotelStays    HotelStay[]
+  itineraryDays Day[]
+}
+
+model Flight {
+  id            Int        @id @default(autoincrement())
+  itineraryId   Int
+  type          String     // "departure" | "arrival"
+  date          String?
+  airline       String?
+  flightNumber  String?
+  flightTime    String?
+  arrivalTime   String?
+  airport       String?
+  lat           Float?
+  lng           Float?
+
+  itinerary     Itinerary  @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+}
+
+model HotelStay {
+  id            Int        @id @default(autoincrement())
+  itineraryId   Int
+  hotelName     String
+  checkIn       String?
+  checkOut      String?
+  notes         String?
+  lat           Float?
+  lng           Float?
+
+  itinerary     Itinerary  @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+}
+
+model Day {
+  id            Int        @id @default(autoincrement())
+  itineraryId   Int
+  dayNumber     Int
+
+  itinerary     Itinerary  @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  activities    Activity[]
+}
+
+model Activity {
+  id            Int     @id @default(autoincrement())
+  dayId         Int
+  time          String?
+  duration      String?
+  title         String
+  location      String?
+  notes         String?
+  status        String  @default("upcoming")
+  lat           Float?
+  lng           Float?
+  order         Int     @default(0)
+
+  day           Day     @relation(fields: [dayId], references: [id], onDelete: Cascade)
+}
