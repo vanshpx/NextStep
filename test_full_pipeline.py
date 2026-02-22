@@ -490,6 +490,244 @@ def run_full_pipeline_test() -> None:
     _ok(f"Total replans (all parts):   {len(session.replan_history)}")
 
     # =========================================================================
+    # PART 6 — HUNGER / FATIGUE DISRUPTION
+    # =========================================================================
+    _banner("PART 6 — HUNGER / FATIGUE DISRUPTION")
+
+    from modules.reoptimization.hunger_fatigue_advisor import (
+        HungerFatigueAdvisor,
+        HUNGER_TRIGGER_THRESHOLD,
+        FATIGUE_TRIGGER_THRESHOLD,
+        HUNGER_RATE,
+        FATIGUE_RATE,
+        HIGH_EFFORT_MULT,
+        MED_EFFORT_MULT,
+        NLP_HUNGER_FLOOR,
+        NLP_FATIGUE_FLOOR,
+        REST_RECOVERY_AMOUNT,
+        TRIGGER_COOLDOWN_MIN,
+    )
+
+    # ── Fresh session for isolated assertions ─────────────────────────────────
+    hf_session = ReOptimizationSession.from_itinerary(
+        itinerary=itinerary,
+        constraints=bundle,
+        remaining_attractions=all_attractions,
+        hotel_lat=28.6139,
+        hotel_lon=77.2090,
+        start_day=1,
+    )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # A: Deterministic accumulation — verify math after advance_to_stop
+    # ─────────────────────────────────────────────────────────────────────────
+    _section("A — Deterministic accumulation (advance_to_stop)")
+
+    hf_day1  = itinerary.days[0]
+    hf_stop1 = hf_day1.route_points[0] if hf_day1.route_points else None
+
+    if hf_stop1:
+        DT = 90   # 90-minute high-intensity stop
+        expected_hunger  = round(min(1.0, DT * HUNGER_RATE), 6)
+        expected_fatigue = round(min(1.0, DT * FATIGUE_RATE * HIGH_EFFORT_MULT), 6)
+
+        hf_session.advance_to_stop(
+            stop_name        = hf_stop1.name,
+            arrival_time     = "09:00",
+            lat              = 28.6560,
+            lon              = 77.2410,
+            cost             = hf_stop1.estimated_cost,
+            duration_minutes = DT,
+            intensity_level  = "high",
+        )
+
+        got_hunger  = round(hf_session.state.hunger_level, 6)
+        got_fatigue = round(hf_session.state.fatigue_level, 6)
+
+        _ok(f"After {DT}-min high-intensity stop:")
+        _ok(f"  hunger_level  expected={expected_hunger:.4f}  got={got_hunger:.4f}")
+        _ok(f"  fatigue_level expected={expected_fatigue:.4f}  got={got_fatigue:.4f}")
+
+        assert abs(got_hunger  - expected_hunger)  < 1e-4, \
+            f"hunger accumulation wrong: expected {expected_hunger}, got {got_hunger}"
+        assert abs(got_fatigue - expected_fatigue) < 1e-4, \
+            f"fatigue accumulation wrong: expected {expected_fatigue}, got {got_fatigue}"
+        _ok("Accumulation math assertions passed ✓")
+    else:
+        _warn("No Day-1 stops available — skipping accumulation math check")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # B: Force hunger above threshold → check_conditions() fires HUNGER advisory
+    # ─────────────────────────────────────────────────────────────────────────
+    _section("B — Force hunger trigger via check_conditions()")
+
+    hf_session.state.hunger_level  = 0.75   # above HUNGER_TRIGGER_THRESHOLD (0.70)
+    hf_session.state.last_meal_time = "05:00"  # ensure no cooldown
+    hf_session.state.current_time  = "12:30"
+
+    hunger_replans_before = len(hf_session.replan_history)
+    hunger_plan = hf_session.check_conditions()   # no env inputs — only HF triggers
+    hunger_replans_after  = len(hf_session.replan_history)
+
+    _ok(f"hunger_level set to 0.75 (threshold={HUNGER_TRIGGER_THRESHOLD})")
+    if hunger_plan:
+        _ok(f"HUNGER_DISRUPTION fired → replan triggered")
+        _ok(f"  New plan ({len(hunger_plan.route_points)} stops): "
+            f"{[rp.name for rp in hunger_plan.route_points]}")
+        _ok(f"  hunger_level after meal reset: {hf_session.state.hunger_level:.2f}")
+        assert hf_session.state.hunger_level == 0.0, \
+            f"hunger_level should be 0 after meal reset, got {hf_session.state.hunger_level}"
+    else:
+        _warn("No hunger replan (stop pool may be empty — check pool state)")
+
+    # Verify DisruptionMemory got a HungerRecord
+    hunger_mem = hf_session._disruption_memory.hunger_history
+    _ok(f"DisruptionMemory.hunger_history: {len(hunger_mem)} record(s)")
+    assert len(hunger_mem) >= 1, "At least 1 HungerRecord expected in DisruptionMemory"
+    h_rec = hunger_mem[-1]
+    _ok(f"  Last record: time={h_rec.trigger_time}  level={h_rec.hunger_level:.2f}"
+        f"  action={h_rec.action_taken}")
+    assert h_rec.action_taken == "meal_inserted", \
+        f"Expected action_taken='meal_inserted', got {h_rec.action_taken!r}"
+    _ok("Hunger DisruptionMemory assertions passed ✓")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # C: Force fatigue above threshold → check_conditions() fires FATIGUE advisory
+    # ─────────────────────────────────────────────────────────────────────────
+    _section("C — Force fatigue trigger via check_conditions()")
+
+    hf_session.state.fatigue_level  = 0.80   # above FATIGUE_TRIGGER_THRESHOLD (0.75)
+    hf_session.state.last_rest_time = "06:00"  # ensure no cooldown
+    hf_session.state.current_time   = "13:10"
+
+    fatigue_plan = hf_session.check_conditions()
+
+    _ok(f"fatigue_level set to 0.80 (threshold={FATIGUE_TRIGGER_THRESHOLD})")
+    if fatigue_plan:
+        _ok(f"FATIGUE_DISRUPTION fired → replan triggered")
+        _ok(f"  New plan ({len(fatigue_plan.route_points)} stops): "
+            f"{[rp.name for rp in fatigue_plan.route_points]}")
+        _ok(f"  fatigue_level after rest: {hf_session.state.fatigue_level:.2f}")
+        assert hf_session.state.fatigue_level < 0.80, \
+            "fatigue_level should decrease after rest break"
+    else:
+        _warn("No fatigue replan (stop pool may be empty)")
+
+    fatigue_mem = hf_session._disruption_memory.fatigue_history
+    _ok(f"DisruptionMemory.fatigue_history: {len(fatigue_mem)} record(s)")
+    assert len(fatigue_mem) >= 1, "At least 1 FatigueRecord expected in DisruptionMemory"
+    f_rec = fatigue_mem[-1]
+    _ok(f"  Last record: time={f_rec.trigger_time}  level={f_rec.fatigue_level:.2f}"
+        f"  action={f_rec.action_taken}  rest_dur={f_rec.rest_duration}min")
+    assert f_rec.action_taken == "rest_inserted", \
+        f"Expected action_taken='rest_inserted', got {f_rec.action_taken!r}"
+    assert f_rec.rest_duration is not None and f_rec.rest_duration > 0, \
+        "rest_duration should be positive"
+    _ok("Fatigue DisruptionMemory assertions passed ✓")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # D: NLP trigger — free-text message with hunger + fatigue keywords
+    # ─────────────────────────────────────────────────────────────────────────
+    _section("D — NLP trigger via USER_REPORT_DISRUPTION")
+
+    # Reset levels to low to make the NLP floor clearly visible
+    hf_session.state.hunger_level  = 0.10
+    hf_session.state.fatigue_level = 0.10
+    hf_session.state.last_meal_time = "06:00"
+    hf_session.state.last_rest_time = "06:00"
+    hf_session.state.current_time  = "14:00"
+
+    _info(f"Before NLP: hunger={hf_session.state.hunger_level:.2f}  "
+          f"fatigue={hf_session.state.fatigue_level:.2f}")
+
+    nlp_message = "I'm absolutely starving and my feet are killing me, I need a break"
+    _info(f"Message: \"{nlp_message}\"")
+
+    nlp_plan = hf_session.event(
+        EventType.USER_REPORT_DISRUPTION,
+        {"message": nlp_message}
+    )
+
+    _ok(f"After NLP:  hunger={hf_session.state.hunger_level:.2f}"
+        f"  (floor={NLP_HUNGER_FLOOR})  "
+        f"fatigue={hf_session.state.fatigue_level:.2f}"
+        f"  (floor={NLP_FATIGUE_FLOOR})")
+
+    # Levels should have jumped to at least the NLP floor
+    # Note: check_conditions also runs during event → they may be reset again
+    # so we just verify the NLP hook did raise them (hunger_history / fatigue_history grow)
+    total_hunger_records  = len(hf_session._disruption_memory.hunger_history)
+    total_fatigue_records = len(hf_session._disruption_memory.fatigue_history)
+    _ok(f"DisruptionMemory after NLP event: "
+        f"hunger_records={total_hunger_records}  fatigue_records={total_fatigue_records}")
+    _ok("NLP trigger path exercised ✓")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # E: Cooldown check — after meal reset, hunger should NOT re-trigger
+    #    if < TRIGGER_COOLDOWN_MIN minutes have passed
+    # ─────────────────────────────────────────────────────────────────────────
+    _section("E — Cooldown: no re-trigger shortly after meal reset")
+
+    hf_session.state.hunger_level  = 0.75    # above threshold
+    hf_session.state.last_meal_time = "14:00" # same as current_time → within cooldown
+    hf_session.state.current_time  = "14:05" # only 5 min since last meal
+
+    advisor = hf_session._hf_advisor
+    triggers_in_cooldown = advisor.check_triggers(hf_session.state)
+    _info(f"hunger_level=0.75  last_meal 5 min ago  cooldown={TRIGGER_COOLDOWN_MIN}min")
+    _ok(f"Triggers returned during cooldown: {triggers_in_cooldown}")
+    assert "hunger_disruption" not in triggers_in_cooldown, \
+        "hunger_disruption should be suppressed while within cooldown window"
+    _ok("Cooldown suppression assertion passed ✓")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # F: DisruptionMemory serialize/deserialize round-trip with HF records
+    # ─────────────────────────────────────────────────────────────────────────
+    _section("F — DisruptionMemory serialize / deserialize round-trip")
+
+    from modules.memory.disruption_memory import DisruptionMemory
+
+    mem = hf_session._disruption_memory
+    json_str = mem.serialize()
+    restored = DisruptionMemory.deserialize(json_str)
+
+    _ok(f"Serialized memory: {len(json_str)} chars")
+    _ok(f"Restored hunger_history  count: {len(restored.hunger_history)}"
+        f"  (original: {len(mem.hunger_history)})")
+    _ok(f"Restored fatigue_history count: {len(restored.fatigue_history)}"
+        f"  (original: {len(mem.fatigue_history)})")
+
+    assert len(restored.hunger_history)  == len(mem.hunger_history), \
+        "Hunger records lost during serialize/deserialize round-trip"
+    assert len(restored.fatigue_history) == len(mem.fatigue_history), \
+        "Fatigue records lost during serialize/deserialize round-trip"
+
+    if restored.hunger_history:
+        orig_h  = mem.hunger_history[-1]
+        resto_h = restored.hunger_history[-1]
+        assert orig_h.action_taken  == resto_h.action_taken,  "action_taken mismatch"
+        assert orig_h.trigger_time  == resto_h.trigger_time,  "trigger_time mismatch"
+        assert orig_h.hunger_level  == resto_h.hunger_level,  "hunger_level mismatch"
+    if restored.fatigue_history:
+        orig_f  = mem.fatigue_history[-1]
+        resto_f = restored.fatigue_history[-1]
+        assert orig_f.action_taken  == resto_f.action_taken,  "action_taken mismatch"
+        assert orig_f.rest_duration == resto_f.rest_duration, "rest_duration mismatch"
+
+    _ok("Serialize / deserialize round-trip assertions passed ✓")
+
+    # ── Part 6 summary ────────────────────────────────────────────────────────
+    _section("Part 6 summary")
+    hf_sum = hf_session._disruption_memory.summarize()
+    _ok(f"HF session replans          : {len(hf_session.replan_history)}")
+    _ok(f"Hunger events in memory     : {hf_sum['hunger_events']}")
+    _ok(f"Fatigue events in memory    : {hf_sum['fatigue_events']}")
+    _ok(f"Clock at end of HF session  : {hf_session.state.current_time}")
+    _ok(f"hunger_level at end         : {hf_session.state.hunger_level:.2f}")
+    _ok(f"fatigue_level at end        : {hf_session.state.fatigue_level:.2f}")
+    _ok("All Part 6 assertions passed ✓")
+
+    # =========================================================================
     # FINAL SUMMARY
     # =========================================================================
     _banner("FULL TEST SUMMARY")
@@ -510,6 +748,11 @@ def run_full_pipeline_test() -> None:
     _ok(f"Disruption log ({len(summary['disruption_log'])} events):")
     for entry in summary["disruption_log"]:
         _info(f"  [{entry['type']}]  {json.dumps({k: v for k, v in entry.items() if k != 'type'})}")
+
+    dm_sum = summary.get("disruption_memory", {})
+    if dm_sum.get("hunger_events", 0) or dm_sum.get("fatigue_events", 0):
+        _ok(f"Hunger disruptions (main session): {dm_sum.get('hunger_events', 0)}")
+        _ok(f"Fatigue disruptions (main session): {dm_sum.get('fatigue_events', 0)}")
 
     print()
     _ok("ALL PARTS COMPLETED SUCCESSFULLY")

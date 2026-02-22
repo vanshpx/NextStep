@@ -11,6 +11,10 @@ from modules.reoptimization.user_edit_handler import (
     UserEditHandler, DislikeResult, ReplaceResult, SkipResult,
     AlternativeOption,
 )
+from modules.reoptimization.hunger_fatigue_advisor import (
+    HungerFatigueAdvisor, HungerAdvisoryResult, FatigueAdvisoryResult,
+    MealOption,
+)
 from modules.reoptimization.session import ReOptimizationSession
 
 __all__ = [
@@ -32,5 +36,9 @@ __all__ = [
     "ReplaceResult",
     "SkipResult",
     "AlternativeOption",
+    "HungerFatigueAdvisor",
+    "HungerAdvisoryResult",
+    "FatigueAdvisoryResult",
+    "MealOption",
     "ReOptimizationSession",
 ]

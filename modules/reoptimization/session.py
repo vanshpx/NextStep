@@ -42,6 +42,9 @@ from modules.memory.disruption_memory import DisruptionMemory
 from modules.reoptimization.user_edit_handler import (
     UserEditHandler, DislikeResult, ReplaceResult, SkipResult,
 )
+from modules.reoptimization.hunger_fatigue_advisor import (
+    HungerFatigueAdvisor, HungerAdvisoryResult, FatigueAdvisoryResult,
+)
 
 
 class ReOptimizationSession:
@@ -79,6 +82,7 @@ class ReOptimizationSession:
         self._traffic_advisor      = TrafficAdvisor()
         self._disruption_memory    = DisruptionMemory()
         self._user_edit            = UserEditHandler()
+        self._hf_advisor           = HungerFatigueAdvisor()
 
         # Destination city for historical insight lookup
         self._city = constraints.hard.destination_city if constraints.hard else ""
@@ -141,10 +145,12 @@ class ReOptimizationSession:
         lat: float | None = None,
         lon: float | None = None,
         cost: float = 0.0,
+        duration_minutes: int = 60,
+        intensity_level: str = "medium",
     ) -> None:
         """
         Record that the traveller has arrived at (and departed from) a stop.
-        Updates clock, position, visited set, and budget.
+        Updates clock, position, visited set, budget, and hunger/fatigue state.
         """
         if arrival_time:
             self.state.advance_time(arrival_time)
@@ -152,11 +158,16 @@ class ReOptimizationSession:
             self.state.move_to(lat, lon)
         self.state.mark_visited(stop_name, cost)
 
+        # Accumulate hunger and fatigue from this stop
+        self._hf_advisor.accumulate(self.state, intensity_level, duration_minutes)
+
         # Update remaining pool
         self._remaining = [a for a in self._remaining if a.name not in self.state.visited_stops]
         self._condition_monitor.update_remaining(self._remaining)
         print(f"  [Session] Visited '{stop_name}' at {self.state.current_time}. "
-              f"Remaining stops: {len(self._remaining)}")
+              f"Remaining stops: {len(self._remaining)}  "
+              f"| Hunger: {self.state.hunger_level:.0%}  "
+              f"| Fatigue: {self.state.fatigue_level:.0%}")
 
     # ── Environmental condition check ────────────────────────────────────────
 
@@ -187,54 +198,64 @@ class ReOptimizationSession:
         )
 
         triggered = [d for d in decisions if d.should_replan]
+
+        result: Optional[DayPlan] = None
+
         if not triggered:
             # Check for crowd decisions that need user input (inform_user strategy)
             for d in decisions:
                 if d.metadata.get("crowd_action") == "inform_user":
-                    return self._handle_crowd_action(d)
-            return None
+                    result = self._handle_crowd_action(d)
+            # Do NOT return here — fall through to HF trigger check below
 
-        # Separate crowd decisions that need special handling
-        crowd_decisions = [
-            d for d in triggered if d.metadata.get("crowd_action")
-        ]
-        weather_decisions = [
-            d for d in triggered if d.metadata.get("weather_action")
-        ]
-        traffic_decisions = [
-            d for d in triggered if d.metadata.get("traffic_action")
-        ]
-        other_decisions = [
-            d for d in triggered
-            if not d.metadata.get("crowd_action")
-            and not d.metadata.get("weather_action")
-            and not d.metadata.get("traffic_action")
-        ]
+        else:
+            # Separate crowd decisions that need special handling
+            crowd_decisions = [
+                d for d in triggered if d.metadata.get("crowd_action")
+            ]
+            weather_decisions = [
+                d for d in triggered if d.metadata.get("weather_action")
+            ]
+            traffic_decisions = [
+                d for d in triggered if d.metadata.get("traffic_action")
+            ]
+            other_decisions = [
+                d for d in triggered
+                if not d.metadata.get("crowd_action")
+                and not d.metadata.get("weather_action")
+                and not d.metadata.get("traffic_action")
+            ]
 
-        result: Optional[DayPlan] = None
+            # Handle crowd rescheduling first
+            for cd in crowd_decisions:
+                result = self._handle_crowd_action(cd)
 
-        # Handle crowd rescheduling first
-        for cd in crowd_decisions:
-            result = self._handle_crowd_action(cd)
+            # Handle weather disruptions
+            for wd in weather_decisions:
+                result = self._handle_weather_action(wd)
 
-        # Handle weather disruptions
-        for wd in weather_decisions:
-            result = self._handle_weather_action(wd)
+            # Handle traffic disruptions
+            for td in traffic_decisions:
+                result = self._handle_traffic_action(td)
 
-        # Handle traffic disruptions
-        for td in traffic_decisions:
-            result = self._handle_traffic_action(td)
+            # Then handle other triggers (generic) if any
+            if other_decisions:
+                reasons = [d.reason for d in other_decisions]
+                deprioritize_outdoor = any(
+                    d.metadata.get("deprioritize_outdoor", False) for d in other_decisions
+                )
+                result = self._do_replan(
+                    reasons=reasons,
+                    deprioritize_outdoor=deprioritize_outdoor,
+                )
 
-        # Then handle other triggers (generic) if any
-        if other_decisions:
-            reasons = [d.reason for d in other_decisions]
-            deprioritize_outdoor = any(
-                d.metadata.get("deprioritize_outdoor", False) for d in other_decisions
-            )
-            result = self._do_replan(
-                reasons=reasons,
-                deprioritize_outdoor=deprioritize_outdoor,
-            )
+        # ── Hunger / Fatigue trigger check ──────────────────────────────────
+        hf_triggers = self._hf_advisor.check_triggers(self.state)
+        for trigger_type in hf_triggers:
+            if trigger_type == "hunger_disruption":
+                result = self._handle_hunger_disruption()
+            elif trigger_type == "fatigue_disruption":
+                result = self._handle_fatigue_disruption()
 
         return result
 
@@ -271,6 +292,12 @@ class ReOptimizationSession:
                     top_n             = 3,
                 )
                 self._print_crowd_advisory(advisory, header="SKIP ADVISORY")
+
+        # ── NLP hook: detect hunger/fatigue signals in free-text reports ──────
+        if event_type == EventType.USER_REPORT_DISRUPTION:
+            self._hf_advisor.check_nlp_trigger(
+                payload.get("message", ""), self.state
+            )
 
         decision = self._event_handler.handle(event_type, payload, self.state)
 
@@ -863,6 +890,91 @@ class ReOptimizationSession:
         if cur:
             print(f"    " + " ".join(cur))
         print(f"\n  {sep}\n")
+
+    # ── Hunger / Fatigue disruption handlers ─────────────────────────────────
+
+    def _handle_hunger_disruption(self) -> DayPlan:
+        """
+        Triggered when hunger_level ≥ HUNGER_TRIGGER_THRESHOLD.
+
+        Action: advance clock by MEAL_DURATION_MIN, reset hunger to 0,
+        build advisory panel, record to DisruptionMemory, run LocalRepair
+        (= _do_replan) to shift remaining stop times.
+        """
+        # Compute advisory (best restaurant options)
+        advisory = self._hf_advisor.build_hunger_advisory(
+            state             = self.state,
+            remaining         = self._remaining,
+            constraints       = self.constraints,
+            cur_lat           = self.state.current_lat,
+            cur_lon           = self.state.current_lon,
+            remaining_minutes = self.state.remaining_minutes_today(),
+            budget_per_meal   = self.budget.Restaurants / max(self.total_days, 1),
+        )
+        # Print advisory panel
+        self._hf_advisor.print_hunger_advisory(advisory)
+
+        # Advance clock + reset hunger
+        minutes_consumed = self._hf_advisor.advance_clock_for_meal(self.state)
+
+        # Record in DisruptionMemory
+        best = advisory.meal_options[0] if advisory.meal_options else None
+        self._disruption_memory.record_hunger(
+            trigger_time    = self.state.current_time,
+            hunger_level    = self.state.hunger_level,     # already reset to 0
+            action_taken    = "meal_inserted",
+            restaurant_name = best.name if best else None,
+            S_pti_inserted  = best.S_pti if best else None,
+            user_response   = "accepted",
+        )
+
+        # LocalRepair: replan downstream stops with new clock start
+        return self._do_replan(
+            reasons=[f"Hunger disruption: {minutes_consumed}-min meal break inserted."]
+        )
+
+    def _handle_fatigue_disruption(self) -> DayPlan:
+        """
+        Triggered when fatigue_level ≥ FATIGUE_TRIGGER_THRESHOLD.
+
+        Action: advance clock by REST_DURATION_MIN, reduce fatigue,
+        build advisory panel, record to DisruptionMemory, run LocalRepair.
+        """
+        # Determine next planned stop name for the advisory
+        next_stop = ""
+        if self.state.current_day_plan and self.state.current_day_plan.route_points:
+            remaining_rp = [
+                rp for rp in self.state.current_day_plan.route_points
+                if rp.name not in self.state.visited_stops
+                and rp.name not in self.state.skipped_stops
+            ]
+            if remaining_rp:
+                next_stop = remaining_rp[0].name
+
+        advisory = self._hf_advisor.build_fatigue_advisory(
+            state     = self.state,
+            next_stop = next_stop,
+            remaining = self._remaining,
+        )
+        self._hf_advisor.print_fatigue_advisory(advisory)
+
+        # Advance clock + reduce fatigue
+        minutes_consumed = self._hf_advisor.advance_clock_for_rest(self.state)
+
+        # Record in DisruptionMemory
+        self._disruption_memory.record_fatigue(
+            trigger_time   = self.state.current_time,
+            fatigue_level  = self.state.fatigue_level,    # already reduced
+            action_taken   = "rest_inserted",
+            rest_duration  = minutes_consumed,
+            stops_deferred = advisory.deferred_stops,
+            user_response  = "accepted",
+        )
+
+        # LocalRepair
+        return self._do_replan(
+            reasons=[f"Fatigue disruption: {minutes_consumed}-min rest break inserted."]
+        )
 
     # ── Internal replan dispatcher ────────────────────────────────────────────
 

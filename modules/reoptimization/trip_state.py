@@ -56,6 +56,13 @@ class TripState:
     # ── Disruption log ────────────────────────────────────────────────
     disruption_log: list[dict] = field(default_factory=list)
 
+    # ── Hunger / Fatigue state ────────────────────────────────────────
+    hunger_level:    float = 0.0    # 0 = satiated, 1 = urgent need to eat
+    fatigue_level:   float = 0.0    # 0 = fresh,    1 = exhausted
+    last_meal_time:  str   = "09:00"  # reset on meal completion
+    last_rest_time:  str   = "09:00"  # reset on rest insertion
+    minutes_on_feet: int   = 0        # cumulative active minutes since last rest
+
     # ── Replan flag ───────────────────────────────────────────────────
     replan_pending: bool = False
 

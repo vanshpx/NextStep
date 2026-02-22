@@ -66,6 +66,28 @@ class ReplacementRecord:
     S_pti_replacement: float = 0.0
 
 
+@dataclass
+class HungerRecord:
+    """One hunger disruption event and its outcome."""
+    trigger_time:    str
+    hunger_level:    float
+    action_taken:    str           # "meal_inserted" | "advisory_only"
+    restaurant_name: str | None    # name of inserted/selected restaurant, if any
+    S_pti_inserted:  float | None  # S_pti of the meal stop
+    user_response:   str = "accepted"  # "accepted" | "skipped"
+
+
+@dataclass
+class FatigueRecord:
+    """One fatigue disruption event and its outcome."""
+    trigger_time:   str
+    fatigue_level:  float
+    action_taken:   str           # "rest_inserted" | "replan_triggered"
+    rest_duration:  int | None    # minutes of rest taken
+    stops_deferred: list[str] = field(default_factory=list)
+    user_response:  str = "accepted"  # "accepted" | "skipped"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # DisruptionMemory
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,6 +111,8 @@ class DisruptionMemory:
         self.weather_history:     list[WeatherRecord]     = []
         self.traffic_history:     list[TrafficRecord]     = []
         self.replacement_history: list[ReplacementRecord] = []
+        self.hunger_history:      list[HungerRecord]      = []
+        self.fatigue_history:     list[FatigueRecord]     = []
 
     # ── Record methods ────────────────────────────────────────────────────────
 
@@ -151,6 +175,44 @@ class DisruptionMemory:
             S_pti_replacement  = S_rep,
         ))
 
+    def record_hunger(
+        self,
+        trigger_time:    str,
+        hunger_level:    float,
+        action_taken:    str,
+        restaurant_name: str | None = None,
+        S_pti_inserted:  float | None = None,
+        user_response:   str = "accepted",
+    ) -> None:
+        """Store outcome of a hunger disruption event."""
+        self.hunger_history.append(HungerRecord(
+            trigger_time    = trigger_time,
+            hunger_level    = hunger_level,
+            action_taken    = action_taken,
+            restaurant_name = restaurant_name,
+            S_pti_inserted  = S_pti_inserted,
+            user_response   = user_response,
+        ))
+
+    def record_fatigue(
+        self,
+        trigger_time:   str,
+        fatigue_level:  float,
+        action_taken:   str,
+        rest_duration:  int | None = None,
+        stops_deferred: list[str] | None = None,
+        user_response:  str = "accepted",
+    ) -> None:
+        """Store outcome of a fatigue disruption event."""
+        self.fatigue_history.append(FatigueRecord(
+            trigger_time   = trigger_time,
+            fatigue_level  = fatigue_level,
+            action_taken   = action_taken,
+            rest_duration  = rest_duration,
+            stops_deferred = stops_deferred or [],
+            user_response  = user_response,
+        ))
+
     # ── Query helpers ─────────────────────────────────────────────────────────
 
     def weather_tolerance_level(self) -> float | None:
@@ -191,6 +253,8 @@ class DisruptionMemory:
             "weather_tolerance":      self.weather_tolerance_level(),
             "traffic_events":         len(self.traffic_history),
             "delay_tolerance_min":    self.delay_tolerance_minutes(),
+            "hunger_events":          len(self.hunger_history),
+            "fatigue_events":         len(self.fatigue_history),
             "replacements":           [
                 {
                     "original":    r.original_stop,
@@ -241,6 +305,28 @@ class DisruptionMemory:
                 }
                 for r in self.replacement_history
             ],
+            "hunger": [
+                {
+                    "trigger_time":    r.trigger_time,
+                    "hunger_level":    r.hunger_level,
+                    "action_taken":    r.action_taken,
+                    "restaurant_name": r.restaurant_name,
+                    "S_pti_inserted":  r.S_pti_inserted,
+                    "user_response":   r.user_response,
+                }
+                for r in self.hunger_history
+            ],
+            "fatigue": [
+                {
+                    "trigger_time":   r.trigger_time,
+                    "fatigue_level":  r.fatigue_level,
+                    "action_taken":   r.action_taken,
+                    "rest_duration":  r.rest_duration,
+                    "stops_deferred": r.stops_deferred,
+                    "user_response":  r.user_response,
+                }
+                for r in self.fatigue_history
+            ],
         }, indent=2)
 
     @classmethod
@@ -264,5 +350,17 @@ class DisruptionMemory:
             mem.record_replacement(
                 r["original"], r["replacement"], r["reason"],
                 r.get("S_orig", 0.0), r.get("S_rep", 0.0),
+            )
+        for h in data.get("hunger", []):
+            mem.record_hunger(
+                h["trigger_time"], h["hunger_level"], h["action_taken"],
+                h.get("restaurant_name"), h.get("S_pti_inserted"),
+                h.get("user_response", "accepted"),
+            )
+        for f in data.get("fatigue", []):
+            mem.record_fatigue(
+                f["trigger_time"], f["fatigue_level"], f["action_taken"],
+                f.get("rest_duration"), f.get("stops_deferred", []),
+                f.get("user_response", "accepted"),
             )
         return mem

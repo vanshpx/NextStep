@@ -45,7 +45,9 @@ class EventType(Enum):
     USER_DISLIKE_NEXT   = "user_dislike_next"  # dislike next stop → request alternatives
     USER_REPLACE_POI    = "user_replace_poi"   # replace a specific stop with chosen alt
     USER_SKIP_CURRENT   = "user_skip_current"  # skip the currently active stop mid-visit
-
+    # ── User-state disruptions (hunger / fatigue) ─────────────────────────
+    HUNGER_DISRUPTION   = "hunger_disruption"  # hunger_level ≥ HUNGER_TRIGGER_THRESHOLD
+    FATIGUE_DISRUPTION  = "fatigue_disruption" # fatigue_level ≥ FATIGUE_TRIGGER_THRESHOLD
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Replan decision
@@ -110,6 +112,8 @@ class EventHandler:
             EventType.USER_DISLIKE_NEXT:      self._handle_dislike_next,
             EventType.USER_REPLACE_POI:       self._handle_replace_poi,
             EventType.USER_SKIP_CURRENT:      self._handle_skip_current,
+            EventType.HUNGER_DISRUPTION:      self._handle_hunger,
+            EventType.FATIGUE_DISRUPTION:     self._handle_fatigue,
         }
         handler_fn = dispatch.get(event_type)
         if handler_fn is None:
@@ -525,5 +529,45 @@ class EventHandler:
                 "remaining_minutes": payload.get(
                     "remaining_minutes", state.remaining_minutes_today()
                 ),
+            },
+        )
+
+    # ── Hunger / Fatigue handlers ──────────────────────────────────────────
+
+    def _handle_hunger(self, state: TripState, payload: dict) -> ReplanDecision:
+        """
+        Fired when hunger_level ≥ HUNGER_TRIGGER_THRESHOLD.
+        Signals session to insert a meal stop + run LocalRepair.
+        """
+        return ReplanDecision(
+            should_replan=True,
+            urgency="normal",
+            reason=(
+                f"Hunger level {state.hunger_level:.0%} exceeded threshold — "
+                f"inserting meal stop and replanning downstream."
+            ),
+            updated_state=state,
+            metadata={
+                "hf_action":    "hunger",
+                "hunger_level": state.hunger_level,
+            },
+        )
+
+    def _handle_fatigue(self, state: TripState, payload: dict) -> ReplanDecision:
+        """
+        Fired when fatigue_level ≥ FATIGUE_TRIGGER_THRESHOLD.
+        Signals session to insert a rest break + run LocalRepair.
+        """
+        return ReplanDecision(
+            should_replan=True,
+            urgency="normal",
+            reason=(
+                f"Fatigue level {state.fatigue_level:.0%} exceeded threshold — "
+                f"inserting rest break and replanning downstream."
+            ),
+            updated_state=state,
+            metadata={
+                "hf_action":     "fatigue",
+                "fatigue_level": state.fatigue_level,
             },
         )
