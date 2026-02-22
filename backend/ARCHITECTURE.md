@@ -1,7 +1,7 @@
 # TravelAgent — Integrated System Architecture
 
 > Combines: **TravelAgent** · **ICDM** · **FTRM** · **ACO** · **Re-optimization Engine**
-> Generated: 2026-02-21 | Updated: 2026-02-22
+> Generated: 2026-02-21 | Updated: 2026-02-22 (approval gate, USER_REORDER, USER_MANUAL_REOPT, record_generic)
 
 ---
 
@@ -168,14 +168,31 @@ TravelAgent System
           Orchestrates: TripState · EventHandler · ConditionMonitor
                         PartialReplanner · CrowdAdvisory · WeatherAdvisor
                         TrafficAdvisor · UserEditHandler · DisruptionMemory
-          event() — routes by metadata key:
-            crowd_action      → _handle_crowd_action()
-            weather_action    → _handle_weather_action()
-            traffic_action    → _handle_traffic_action()
-            user_edit_action  → _handle_user_edit_action()
-          check_conditions()  — feeds ConditionMonitor; auto-routes above
-          advance_to_stop()   — moves clock + position + marks visited
-          summary()           — snapshot including disruption_memory```
+                        HungerFatigueAdvisor
+          Data containers:
+            ProposedAction  — one candidate action {action_type, target_stop, details}
+            PendingDecision — frozen approval-gate payload; covers env + user events
+          Approval gate (_USER_GATE_EVENTS — NO mutation until resolved):
+            user_skip · user_skip_current · user_dislike_next · user_replace_poi
+            user_add  · user_pref         · user_reorder       · user_manual_reopt
+          event()           — user events in gate → builds PendingDecision (no replan);
+                              env metadata keys (crowd_action / weather_action /
+                              traffic_action) → check_conditions() → gate;
+                              remaining events → direct dispatch
+          check_conditions(crowd_level, traffic_level, weather_condition, …)
+                            Feeds ConditionMonitor. Does NOT auto-replan.
+                            If threshold exceeded → freezes state →
+                            builds PendingDecision → stores in
+                            session.pending_decision → returns None.
+          resolve_pending(user_decision, action_index=None)
+                            Applies user's answer to latest gate:
+                              APPROVE  → execute action + replan → new DayPlan
+                              REJECT   → keep itinerary unchanged → None
+                              MODIFY   → apply one ProposedAction by index → new DayPlan
+                            Records outcome in DisruptionMemory.record_generic()
+          advance_to_stop() — moves clock + position + marks visited +
+                              updates hunger/fatigue accumulators
+          summary()         — snapshot including disruption_memory```
 
 ---
 
@@ -598,6 +615,8 @@ modules/reoptimization/event_handler.py — EventType
 | `USER_DISLIKE_NEXT` | `user_dislike_next` | Dislike next stop; request alternatives | ✗ | `_handle_dislike_next` → session `_handle_user_edit_action` |
 | `USER_REPLACE_POI` | `user_replace_poi` | Replace next stop with chosen alternative | ✓ | `_handle_replace_poi` → session `_handle_user_edit_action` |
 | `USER_SKIP_CURRENT` | `user_skip_current` | Abort currently active stop mid-visit | ✓ | `_handle_skip_current` → session `_handle_user_edit_action` |
+| `USER_REORDER` | `user_reorder` | Request a specific stop order | ✓ | `_handle_reorder` — advisory `preferred_order` list passed to ACO re-sequence; routed through approval gate |
+| `USER_MANUAL_REOPT` | `user_manual_reopt` | Explicit user request to re-optimize rest of day | ✓ | `_handle_manual_reopt` — full replan triggered; routed through approval gate |
 | `ENV_CROWD_HIGH` | `env_crowd` | Crowd level > tolerance threshold | cond. | `_handle_env_crowd` — 3-strategy tree |
 | `ENV_TRAFFIC_HIGH` | `env_traffic` | Traffic level > tolerance threshold | cond. | `_handle_env_traffic` — TrafficAdvisor |
 | `ENV_WEATHER_BAD` | `env_weather` | Weather severity > tolerance threshold | cond. | `_handle_env_weather` — WeatherAdvisor |
@@ -809,19 +828,33 @@ Record types:
     TrafficRecord     — traffic_level, threshold, delay_minutes, delay_factor,
                         deferred[], replaced[]
     ReplacementRecord — original, replacement, reason, S_orig, S_rep, timestamp
+    HungerRecord      — trigger_time, level, action_taken, restaurant_name, user_response
+    FatigueRecord     — trigger_time, level, action_taken, rest_duration, user_response
 
 Learning signals:
     weather_tolerance_level()  → rolling avg of severities the traveller accepted
     delay_tolerance_minutes()  → rolling avg of traffic delays tolerated
     common_replacements()      → most frequent replacement patterns
 
+Public write methods:
+    record_weather()       — after weather event
+    record_traffic()       — after traffic event
+    record_replacement()   — after accepted stop replacement
+    record_hunger()        — after HUNGER_DISRUPTION resolves
+    record_fatigue()       — after FATIGUE_DISRUPTION resolves
+    record_generic(disruption_type, severity, action_taken,
+                   user_response, impacted_stops)
+                           — after any APPROVE / REJECT / MODIFY gate decision
+
 Persistence:
-    serialize()   → dict  (JSON-safe)
+    serialize()   → str  (JSON string — written to disk / passed cross-session)
     deserialize() → DisruptionMemory  (used at session start for multi-day trips)
 
 Integration:
     Written after: every weather event · every traffic event ·
-                   every accepted replace · every high-S_pti skip
+                   every accepted replace · every high-S_pti skip ·
+                   every hunger/fatigue disruption ·
+                   every resolve_pending() APPROVE / REJECT / MODIFY
     Read in:       session.summary()["disruption_memory"]
 ```
 
@@ -832,6 +865,13 @@ Integration:
 | `visited_stops` | `mark_visited()` | Successfully completed stop | No |
 | `skipped_stops` | `mark_skipped()` | Permanently removed — user skip, venue closed, USER_SKIP_CURRENT | No |
 | `deferred_stops` | `defer_stop()` / `undefer_stop()` | Temporary exclusion — crowded, weather-blocked, traffic-delayed | Yes — `undefer_stop()` re-admits |
+
+**Additional TripState fields (not stop-set related):**
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `replan_pending` | `bool` | `False` | Set to `True` by `_handle_reorder` / `_handle_manual_reopt` before returning `ReplanDecision`; consumed by session then cleared |
+| `disruption_log` | `list[dict]` | `[]` | Append-only log of every event dispatched through `EventHandler.handle()` |
 
 > `PartialReplanner.replan()` always filters `visited ∪ skipped ∪ deferred` before
 > delegating to `RoutePlanner._plan_single_day()`.
@@ -969,4 +1009,62 @@ recomputed from the new `current_time`.
 event with `trigger_time`, level, `action_taken`, `restaurant_name` / `rest_duration`,
 and `user_response`. Included in `serialize()` / `deserialize()` for cross-session
 persistence.
+
+---
+
+### 9.12 User-Action Approval Gate
+
+**Purpose:** Prevent irreversible state mutations until the user explicitly confirms.
+All events in `_USER_GATE_EVENTS` are intercepted before `TripState` is touched.
+
+```
+Approval gate lifecycle
+═══════════════════════
+
+1.  session.event(EventType.USER_SKIP, {"stop_name": "X"})  ← user input
+        │
+        ├─ event type in _USER_GATE_EVENTS?  Yes
+        │    │
+        │    └─ _build_user_action_pending(ev_type, payload)
+        │           computes: impacted_pois, missed_value (avg S_pti proxy),
+        │                     proposed_actions (APPLY_CHANGE / SUGGEST_ALTERNATIVES /
+        │                                       DEFER_CHANGE / KEEP_AS_IS),
+        │                     suggested_alternatives (top-3 by S_pti),
+        │                     impact_summary (feasibility, satisfaction,
+        │                                     time, cost deltas)
+        │           prints PendingDecision panel
+        │           stores → session.pending_decision
+        │           returns None   ← NO mutation yet
+        │
+2.  session.resolve_pending("APPROVE" | "REJECT" | "MODIFY", action_index=...)
+        │
+        ├─ APPROVE  → _execute_user_event(ev_type, payload) → replan → DayPlan
+        ├─ REJECT   → discard pending; itinerary unchanged; returns None
+        └─ MODIFY   → apply chosen ProposedAction by index:
+                        APPLY_CHANGE / SUGGEST_ALTERNATIVES → same as APPROVE
+                        DEFER_CHANGE  → defer_stop(target) + replan
+                        DEFER         → defer_stop(target) + replan
+                        KEEP_AS_IS    → same as REJECT
+
+Invariant: session.pending_decision is None while no gate is active.
+           Only one pending decision at a time — a second check_conditions()
+           call is blocked until the first is resolved.
+```
+
+**`_USER_GATE_EVENTS` frozenset (session.py):**
+
+| Event value | Intercepted? |
+|---|---|
+| `user_skip` | ✓ |
+| `user_skip_current` | ✓ |
+| `user_dislike_next` | ✓ |
+| `user_replace_poi` | ✓ |
+| `user_add` | ✓ |
+| `user_pref` | ✓ |
+| `user_reorder` | ✓ |
+| `user_manual_reopt` | ✓ |
+| `user_delay` | ✗ — immediate clock advance |
+| `user_report` | ✗ — NLP path, direct dispatch |
+| All `env_*` / `venue_closed` | ✗ — go through `check_conditions()` gate |
+| `hunger_disruption` / `fatigue_disruption` | ✗ — direct dispatch |
 
