@@ -5,23 +5,21 @@ Dataclass definitions for the three constraint types in TravelAgent.
 
 Hard Constraints (HC) — non-negotiable; violating any makes the itinerary invalid:
   Time & Scheduling:
-    operating_hours        — place must be open when visited
+    operating_hours        — place must be open when visited (Google Places)
     no_time_overlap        — enforced by ACO sequential tour construction
     transit_time           — Dij accounted in Tmax budget (hc2 in registry)
     activity_duration      — min_visit_duration_minutes per venue
     fixed_appointments     — pre-booked flights/check-ins with locked times
   Geography & Logistics:
     requires_wheelchair    — venue must be wheelchair accessible if needed
-    visa_restricted_countries — destination must not be in restricted list
-    traveler_ages          — age restrictions per venue
   Budget:
     total cost cap         — enforced by BudgetPlanner.validate()
     mandatory_spend        — fixed_appointments sunk costs honored
-  Group & Personal:
-    group_size             — checked against venue min/max capacity
   Date Boundaries:
     departure_date/return_date — no activity outside trip window
-    seasonal_open_months   — venue must be open in the trip month
+
+  REMOVED (no API source): group_size, traveler_ages, visa_restricted_countries,
+    seasonal_open_months — see 07-simplified-model.md
 
 Soft Constraints (SC) — preferences; violating degrades, not invalidates:
   Experience & Comfort:
@@ -51,6 +49,26 @@ from typing import Optional
 
 
 @dataclass
+class PassengerDetails:
+    """
+    Per-passenger details required by TBO for flight and hotel booking.
+    Collected in Phase 3 of ChatIntake.
+    """
+    title: str = "Mr"              # Mr | Mrs | Ms | Dr
+    first_name: str = ""
+    last_name: str = ""
+    date_of_birth: str = ""        # "YYYY-MM-DD" — required for flights
+    gender: int = 1                # 1 = Male, 2 = Female
+    email: str = ""
+    mobile: str = ""               # digits only, no leading +
+    mobile_country_code: str = "91"  # "91" for India
+    nationality_code: str = "IN"   # ISO-2 country code
+    passenger_type: int = 1        # 1 = Adult, 2 = Child, 3 = Infant
+    id_number: str = ""            # Aadhaar / passport / Voter ID number
+    id_expiry: str = ""            # "YYYY-MM-DD" (when applicable)
+
+
+@dataclass
 class HardConstraints:
     """
     Non-negotiable trip requirements.  Any violation gates S_pti to 0.
@@ -63,25 +81,17 @@ class HardConstraints:
     return_date: Optional[date] = None
     num_adults: int = 1
     num_children: int = 0
-    restaurant_preference: str = ""          # cuisine / dietary string from Phase 1 form
-
-    # ── Accessibility & group ─────────────────────────────────────────────────
+    restaurant_preference: str = ""          # cuisine / dietary string from Phase 1 form    guest_nationality: str = "IN"            # ISO-2 country code; used in TBO hotel search
+    # ── Accessibility ─────────────────────────────────────────────────────────
     requires_wheelchair: bool = False         # venues must be wheelchair accessible
-    group_size: int = 1                       # total travellers; checked vs venue min/max
-    traveler_ages: list[int] = field(default_factory=list)
-    # ^ actual ages of travellers; used for age-restriction HC (hc4 in registry)
-    # Leave empty to disable age-restriction checks.
+    # Removed: group_size, traveler_ages (no venue min/max-age API source)
+    # Removed: visa_restricted_countries (destination-level, not FTRM scope)
 
     # ── Fixed / pre-booked slots ──────────────────────────────────────────────
     fixed_appointments: list[dict] = field(default_factory=list)
     # ^ Each entry: {"name": str, "date": "YYYY-MM-DD", "time": "HH:MM",
     #                "duration_minutes": int, "type": "flight|hotel|tour"}
     # These are sunk-cost commitments and must be honored.
-
-    # ── Geography / legal ─────────────────────────────────────────────────────
-    visa_restricted_countries: list[str] = field(default_factory=list)
-    # ^ ISO country codes (e.g. ["KP", "IR"]) that are inaccessible to
-    # the traveller; used to gate destinations (handled upstream, not in FTRM).
 
     @property
     def total_travelers(self) -> int:
@@ -136,8 +146,8 @@ class SoftConstraints:
     # ^ max consecutive activity minutes before inserting a rest/meal break.
     # Used in route planner to inject break slots.
     heavy_travel_penalty: bool = True
-    # ^ True → strenuous (intensity_level="high") attractions score lower on
-    # arrival/departure days and the day immediately after a long flight.
+    # ^ True → outdoor high-footprint attractions score lower via SC_o
+    # on arrival/departure days. (intensity_level removed — no API source.)
 
     # ── Interest alignment ────────────────────────────────────────────────────
     avoid_consecutive_same_category: bool = True
@@ -166,3 +176,8 @@ class ConstraintBundle:
     hard: HardConstraints = field(default_factory=HardConstraints)
     soft: SoftConstraints = field(default_factory=SoftConstraints)
     commonsense: CommonsenseConstraints = field(default_factory=CommonsenseConstraints)
+    # Pipeline binding fields — set by ChatIntake and asserted in run_pipeline()
+    total_budget: float = 0.0          # user-confirmed budget (INR); 0.0 = not set
+    has_chat_input: bool = False        # True when user provided Phase 2 free-text preferences
+    # Passenger details collected in Phase 3 — used by TBO booking flow
+    passengers: list[PassengerDetails] = field(default_factory=list)

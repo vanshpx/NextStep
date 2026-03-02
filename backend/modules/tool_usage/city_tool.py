@@ -13,7 +13,6 @@ TODO (MISSING from architecture doc):
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
-import requests
 import config
 
 
@@ -36,56 +35,31 @@ class CityRecord:
 
 
 class CityTool:
-    """Wraps the external City information API."""
+    """Returns city information from hardcoded stub data."""
 
-    def __init__(self, api_url: str = config.CITY_API_URL, api_key: str = config.SERPAPI_KEY):
-        self.api_url = api_url
-        self.api_key = api_key
+    def __init__(self) -> None:
+        pass
 
-    def fetch(self, city_name: str, **kwargs: Any) -> CityRecord:
-        """
-        Fetch general information about a city.
-
-        Args:
-            city_name: Name of the city.
-            **kwargs:  Additional filters.
-                       TODO: MISSING — full parameter schema.
-
-        Returns:
-            CityRecord with populated fields.
-        """
-        # TODO: Replace entire `if` block with real API call once endpoint/schema is known.
-        if self.api_url == "UNSPECIFIED":
-            print(f"  [DUMMY API] CityTool.fetch({city_name!r}) — returning hardcoded stub data.")
-            _CITY_STUBS = {
-                "Delhi": CityRecord(
-                    city_name="Delhi", country="India", timezone="Asia/Kolkata",
-                    currency="INR", center_lat=28.6139, center_lon=77.2090,
-                    population=32_900_000, language="Hindi",
-                ),
-                "Mumbai": CityRecord(
-                    city_name="Mumbai", country="India", timezone="Asia/Kolkata",
-                    currency="INR", center_lat=19.0760, center_lon=72.8777,
-                    population=20_700_000, language="Marathi",
-                ),
-            }
-            return _CITY_STUBS.get(
-                city_name,
-                CityRecord(city_name=city_name, country="India",
-                           timezone="Asia/Kolkata", currency="INR"),
-            )
-
-        params: dict[str, Any] = {
-            "city": city_name,
-            "api_key": self.api_key,
+    def fetch(self, city_name: str, **kwargs) -> CityRecord:
+        """Return stub city record."""
+        print(f"  [CityTool] Returning stub city data for {city_name!r}")
+        _CITY_STUBS = {
+            "Delhi": CityRecord(
+                city_name="Delhi", country="India", timezone="Asia/Kolkata",
+                currency="INR", center_lat=28.6139, center_lon=77.2090,
+                population=32_900_000, language="Hindi",
+            ),
+            "Mumbai": CityRecord(
+                city_name="Mumbai", country="India", timezone="Asia/Kolkata",
+                currency="INR", center_lat=19.0760, center_lon=72.8777,
+                population=20_700_000, language="Marathi",
+            ),
         }
-        params.update(kwargs)
-
-        response = requests.get(self.api_url, params=params, timeout=10)
-        response.raise_for_status()
-        raw_data: dict = response.json()  # TODO: MISSING — actual response key path
-
-        return self._parse_record(raw_data)
+        return _CITY_STUBS.get(
+            city_name,
+            CityRecord(city_name=city_name, country="India",
+                       timezone="Asia/Kolkata", currency="INR"),
+        )
 
     @staticmethod
     def _parse_record(item: dict) -> CityRecord:

@@ -146,8 +146,8 @@ def _why_suitable_edit(score: AttractionScore, soft: Any) -> str:
         parts.append(f"matches interest in '{a.category}'")
     if soft.avoid_crowds and not getattr(a, "is_outdoor", False):
         parts.append("indoor — less crowded")
-    if soft.pace_preference == "relaxed" and a.intensity_level == "low":
-        parts.append("low intensity — suits relaxed pace")
+    if soft.pace_preference == "relaxed":
+        parts.append("relaxed-pace friendly")
     parts.append(f"S_pti={score.S_pti:.2f}")
     return "; ".join(parts)
 
@@ -214,18 +214,9 @@ class UserEditHandler:
         )
         current_S = 0.0
         if disliked_record is not None:
-            _dep = getattr(constraints.hard, "departure_date", None)
-            _month = _dep.month if _dep else 0
-            _group = (
-                (constraints.hard.group_size or 0)
-                or constraints.hard.total_travelers or 1
-            ) if constraints.hard else 1
             scorer_check = AttractionScorer(
-                Tmax_minutes  = remaining_minutes,
-                constraints   = constraints,
-                trip_month    = _month,
-                group_size    = _group,
-                traveler_ages = constraints.hard.traveler_ages if constraints.hard else [],
+                Tmax_minutes=remaining_minutes,
+                constraints=constraints,
             )
             scored_check = scorer_check.score_all([disliked_record],
                                                    current_lat, current_lon, current_time_str)
@@ -244,18 +235,9 @@ class UserEditHandler:
             )
 
         # Score candidates with full FTRM
-        _dep = getattr(constraints.hard, "departure_date", None)
-        _month = _dep.month if _dep else 0
-        _group = (
-            (constraints.hard.group_size or 0)
-            or constraints.hard.total_travelers or 1
-        ) if constraints.hard else 1
         scorer = AttractionScorer(
-            Tmax_minutes  = remaining_minutes,
-            constraints   = constraints,
-            trip_month    = _month,
-            group_size    = _group,
-            traveler_ages = constraints.hard.traveler_ages if constraints.hard else [],
+            Tmax_minutes=remaining_minutes,
+            constraints=constraints,
         )
         scored = scorer.score_all(candidates, current_lat, current_lon, current_time_str)
 
@@ -317,7 +299,7 @@ class UserEditHandler:
             1. replacement not already visited or skipped
             2. HC_pti(replacement) > 0
             3. Dij(current→replacement) + STi(replacement) ≤ remaining_minutes
-            4. replacement.entry_cost ≤ budget_remaining
+            4. (no entry cost check — entry_cost removed; no API source)
             5. No duplicate: replacement not already in future plan
 
         On success:
@@ -354,18 +336,9 @@ class UserEditHandler:
             )
 
         # HC check
-        _dep = getattr(constraints.hard, "departure_date", None)
-        _month = _dep.month if _dep else 0
-        _group = (
-            (constraints.hard.group_size or 0)
-            or constraints.hard.total_travelers or 1
-        ) if constraints.hard else 1
         scorer = AttractionScorer(
-            Tmax_minutes  = remaining_minutes,
-            constraints   = constraints,
-            trip_month    = _month,
-            group_size    = _group,
-            traveler_ages = constraints.hard.traveler_ages if constraints.hard else [],
+            Tmax_minutes=remaining_minutes,
+            constraints=constraints,
         )
         scored = scorer.score_all(
             [replacement_record], current_lat, current_lon, current_time_str
@@ -398,16 +371,7 @@ class UserEditHandler:
                 ),
             )
 
-        if replacement_record.entry_cost > budget_remaining:
-            return ReplaceResult(
-                original_stop    = original_name,
-                replacement_stop = replacement_record.name,
-                accepted         = False,
-                rejection_reason = (
-                    f"Budget exceeded: entry cost {replacement_record.entry_cost:.2f} "
-                    f"> remaining {budget_remaining:.2f}."
-                ),
-            )
+        # NOTE: entry_cost check removed — field dropped from AttractionRecord (no API source)
 
         future_names = {
             rp.name for rp in current_plan.route_points[next_idx + 1:]
@@ -434,7 +398,7 @@ class UserEditHandler:
         rps[next_idx].location_lat           = replacement_record.location_lat
         rps[next_idx].location_lon           = replacement_record.location_lon
         rps[next_idx].visit_duration_minutes = replacement_record.visit_duration_minutes
-        rps[next_idx].estimated_cost         = replacement_record.entry_cost
+        rps[next_idx].estimated_cost         = 0.0  # entry_cost removed; no API source
         rps[next_idx].notes                  = f"Replaced original stop '{original_name}' by user."
 
         # Recompute times from current clock forward
@@ -464,7 +428,7 @@ class UserEditHandler:
                 ),
             )
 
-        budget_delta = replacement_record.entry_cost - old_cost
+        budget_delta = 0.0 - old_cost  # entry_cost removed; treat as zero
 
         return ReplaceResult(
             original_stop    = original_name,
@@ -516,18 +480,9 @@ class UserEditHandler:
         )
         S_lost = 0.0
         if record is not None:
-            _dep = getattr(constraints.hard, "departure_date", None)
-            _month = _dep.month if _dep else 0
-            _group = (
-                (constraints.hard.group_size or 0)
-                or constraints.hard.total_travelers or 1
-            ) if constraints.hard else 1
             scorer = AttractionScorer(
-                Tmax_minutes  = remaining_minutes,
-                constraints   = constraints,
-                trip_month    = _month,
-                group_size    = _group,
-                traveler_ages = constraints.hard.traveler_ages if constraints.hard else [],
+                Tmax_minutes=remaining_minutes,
+                constraints=constraints,
             )
             scored = scorer.score_all([record], current_lat, current_lon, current_time_str)
             if scored:

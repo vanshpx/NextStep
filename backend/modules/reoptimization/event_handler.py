@@ -227,98 +227,45 @@ class EventHandler:
             "stop_name"          : str,
             "crowd_level"        : float [0-1],
             "threshold"          : float,
-            "total_days"         : int   (total trip days — injected by session/monitor),
-            "remaining_minutes"  : int   (minutes left today — injected by session/monitor),
-            "min_visit_duration" : int   (min minutes needed for this stop),
-            "place_importance"   : str   (shown to user if no rescheduling possible),
+            "place_importance"   : str   (shown to user),
         }
 
         Crowd level at the next planned stop exceeded user tolerance.
-        Instead of immediately skipping, the system tries three strategies in order:
 
-        Strategy 1 — Reschedule later TODAY
-            If enough day remains (remaining > min_duration + 60-min buffer),
-            defer the stop: exclude it from this replan, keep it available for
-            the next planning cycle when the crowd may have thinned.
+        NO AUTO-SHIFT RULE:
+            The schedule is frozen immediately.
+            No defer_stop(), no auto-replan, no clock mutation.
+            All three options (wait, replace, skip, keep) are surfaced
+            to the user via the approval gate in ReOptimizationSession.
 
-        Strategy 2 — Move to a FUTURE DAY
-            If today is too short but trip days remain, shift the stop to the
-            next day so the traveller still gets to visit.
-
-        Strategy 3 — Inform user (no rescheduling possible)
-            On the last day (or when no capacity exists), present the stop's
-            historical/cultural significance and let the user decide whether to
-            visit despite the crowds or skip permanently.
+        Returns:
+            ReplanDecision(should_replan=False) — gate handles everything.
         """
-        stop            = payload.get("stop_name", "")
-        level           = payload.get("crowd_level", 0.0)
-        threshold       = payload.get("threshold", 0.5)
-        total_days      = payload.get("total_days", state.current_day)
-        remaining_min   = payload.get("remaining_minutes", state.remaining_minutes_today())
-        min_duration    = payload.get("min_visit_duration", 60)
+        stop             = payload.get("stop_name", "")
+        level            = payload.get("crowd_level", 0.0)
+        threshold        = payload.get("threshold", 0.5)
         place_importance = payload.get("place_importance", "")
 
-        # Buffer: need at least min_duration more after completing current obligations
-        time_for_later = remaining_min - min_duration - 60  # 60-min breathing room
-
-        # ── Strategy 1: Reschedule to a quieter time later today ─────────────
-        if stop and time_for_later >= min_duration:
-            state.defer_stop(stop)   # temporarily exclude from this replan
-            return ReplanDecision(
-                should_replan=True,
-                urgency="low",
-                reason=(
-                    f"'{stop}' is very crowded right now ({level:.0%} > {threshold:.0%}). "
-                    f"Rescheduling to a quieter time later today \u2014 "
-                    f"moving on to the next stop first."
-                ),
-                updated_state=state,
-                metadata={
-                    "crowd_action":  "reschedule_same_day",
-                    "deferred_stop": stop,
-                },
-            )
-
-        # ── Strategy 2: Move to a future day ─────────────────────────────────
-        if stop and state.current_day < total_days:
-            target_day = state.current_day + 1
-            state.defer_stop(stop)   # excluded from today's plan
-            return ReplanDecision(
-                should_replan=True,
-                urgency="normal",
-                reason=(
-                    f"'{stop}' is very crowded ({level:.0%}) and today's schedule "
-                    f"is too full to visit later. Rescheduled to Day {target_day} "
-                    f"for a better experience."
-                ),
-                updated_state=state,
-                metadata={
-                    "crowd_action":  "reschedule_future_day",
-                    "deferred_stop": stop,
-                    "target_day":    target_day,
-                },
-            )
-
-        # ── Strategy 3: No rescheduling possible — inform user ────────────────
-        # Don't auto-skip; present importance and let the traveller decide.
         importance_text = (
             place_importance
-            or f"'{stop}' is a notable attraction on your itinerary."
+            or f"'{stop}' is a planned stop on your itinerary."
         )
+
+        # No state mutation — schedule frozen until user decides
         return ReplanDecision(
-            should_replan=False,   # session will prompt user; no auto-replan
+            should_replan=False,
             urgency="high",
             reason=(
-                f"'{stop}' is very crowded ({level:.0%}) and cannot be "
-                f"rescheduled (last day or no capacity)."
+                f"'{stop}' is overcrowded ({level:.0%} > threshold {threshold:.0%}). "
+                f"Awaiting your decision before any schedule change."
             ),
             updated_state=state,
             metadata={
-                "crowd_action":    "inform_user",
-                "deferred_stop":   stop,
+                "crowd_action":    "await_user_decision",
+                "stop_name":       stop,
+                "crowd_level":     level,
+                "threshold":       threshold,
                 "place_importance": importance_text,
-                "crowd_level":      level,
-                "threshold":        threshold,
             },
         )
 
@@ -328,35 +275,30 @@ class EventHandler:
                    "threshold": float, "delay_minutes": int,
                    "current_lat": float, "current_lon": float,
                    "remaining_minutes": int }
-        Traffic to the next stop is too heavy.
-          - Apply delay to clock immediately.
-          - Fire TrafficAdvisor (via session._handle_traffic_action) on replan.
-          - Deferred/replaced stop decisions are made by the advisor.
+
+        NO AUTO-SHIFT RULE:
+            Clock is NOT advanced automatically.
+            No auto-replan is triggered.
+            Context is captured for the gate; user decides the action.
         """
-        stop          = payload.get("stop_name", "")
-        traffic       = payload.get("traffic_level", 0.0)
-        threshold     = payload.get("threshold", 0.5)
-        delay         = int(payload.get("delay_minutes", 0))
-        delay_factor  = 1.0 + traffic
+        stop         = payload.get("stop_name", "")
+        traffic      = payload.get("traffic_level", 0.0)
+        threshold    = payload.get("threshold", 0.5)
+        delay        = int(payload.get("delay_minutes", 0))
+        delay_factor = 1.0 + traffic
 
-        if delay >= 20:
-            h, m = map(int, state.current_time.split(":"))
-            total = h * 60 + m + delay
-            state.advance_time(f"{total // 60:02d}:{total % 60:02d}")
-
-        should_replan = delay >= 20
+        # No state mutation — clock frozen until user approves
         return ReplanDecision(
-            should_replan = should_replan,
-            urgency       = "normal" if delay < 40 else "high",
-            reason        = (
-                f"Traffic to '{stop}' at {traffic:.0%} "
-                f"(threshold {threshold:.0%}), +{delay} min delay. "
-                f"Delay factor ×{delay_factor:.1f} — rereplanning with "
-                f"updated Dij_new."
+            should_replan=False,
+            urgency="high" if delay >= 40 else "normal",
+            reason=(
+                f"Heavy traffic to '{stop}' ({traffic:.0%} > threshold "
+                f"{threshold:.0%}), estimated delay +{delay} min "
+                f"(×{delay_factor:.1f}). Awaiting your decision."
             ),
-            updated_state = state,
-            metadata = {
-                "traffic_action":   "assess_and_replan",
+            updated_state=state,
+            metadata={
+                "traffic_action":   "await_user_decision",
                 "stop_name":        stop,
                 "traffic_level":    traffic,
                 "threshold":        threshold,
@@ -417,16 +359,26 @@ class EventHandler:
     def _handle_venue_closed(self, state: TripState, payload: dict) -> ReplanDecision:
         """
         payload: { "stop_name": str }
-        A planned stop is unexpectedly closed. Skip and replan immediately.
+
+        NO AUTO-SHIFT RULE:
+            Stop is NOT auto-skipped. Schedule is frozen.
+            Alternatives are generated by the session gate.
+            User then chooses: replace / skip / keep / wait.
         """
         stop = payload.get("stop_name", "")
-        if stop:
-            state.mark_skipped(stop)
+        # No state.mark_skipped() — frozen until user decides
         return ReplanDecision(
-            should_replan=True,
+            should_replan=False,
             urgency="high",
-            reason=f"'{stop}' is unexpectedly closed — rerouting immediately.",
+            reason=(
+                f"'{stop}' is unexpectedly closed. "
+                f"Awaiting your decision before removing it from the plan."
+            ),
             updated_state=state,
+            metadata={
+                "venue_action": "await_user_decision",
+                "stop_name":    stop,
+            },
         )
 
     # ── User-edit handlers ────────────────────────────────────────────────────

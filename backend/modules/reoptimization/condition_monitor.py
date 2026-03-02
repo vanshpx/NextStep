@@ -53,7 +53,9 @@ WEATHER_SEVERITY: dict[str, float] = {
     "snow":         0.70,
     "blizzard":     1.00,
     "foggy":        0.40,
+    "fog":          0.40,
     "hot":          0.35,    # heat advisory
+    "cold":         0.30,    # cold advisory
     "heatwave":     0.65,
 }
 
@@ -66,9 +68,9 @@ class ConditionThresholds:
     weather: float   # trigger replan when weather_severity > this
 
     def describe(self) -> str:
-        return (f"crowd>{self.crowd:.0%}  "
-                f"traffic>{self.traffic:.0%}  "
-                f"weather>{self.weather:.0%}")
+        return (f"crowd\u2265{self.crowd:.0%}  "
+                f"traffic\u2265{self.traffic:.0%}  "
+                f"weather\u2265{self.weather:.0%}")
 
 
 class ConditionMonitor:
@@ -141,7 +143,7 @@ class ConditionMonitor:
         decisions: list[ReplanDecision] = []
 
         # ── Crowd check ───────────────────────────────────────────────────────
-        if crowd_level is not None and crowd_level > self.thresholds.crowd:
+        if crowd_level is not None and crowd_level >= self.thresholds.crowd:
             # Look up stop-specific details to enrich the crowd payload so the
             # event handler can choose the right rescheduling strategy.
             stop_record = next(
@@ -171,7 +173,7 @@ class ConditionMonitor:
             decisions.append(d)
 
         # ── Traffic check ─────────────────────────────────────────────────────
-        if traffic_level is not None and traffic_level > self.thresholds.traffic:
+        if traffic_level is not None and traffic_level >= self.thresholds.traffic:
             d = self._event_handler.handle(
                 EventType.ENV_TRAFFIC_HIGH,
                 {
@@ -190,7 +192,7 @@ class ConditionMonitor:
         # ── Weather check ─────────────────────────────────────────────────────
         if weather_condition is not None:
             severity = WEATHER_SEVERITY.get(weather_condition.lower(), 0.0)
-            if severity > self.thresholds.weather:
+            if severity >= self.thresholds.weather:
                 d = self._event_handler.handle(
                     EventType.ENV_WEATHER_BAD,
                     {

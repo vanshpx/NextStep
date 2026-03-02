@@ -114,17 +114,15 @@ def _why_suitable(score: AttractionScore, soft: Any) -> str:
     elif soft.avoid_crowds and a.is_outdoor:
         reasons.append("outdoor \u2014 best visited off-peak")
 
-    # sc5 — pace / intensity
-    if soft.pace_preference == "relaxed" and a.intensity_level == "low":
-        reasons.append("low intensity \u2014 suits your relaxed pace")
-    elif soft.pace_preference == "packed" and a.intensity_level in ("medium", "high"):
-        reasons.append("high-value stop \u2014 keeps your pace")
+    # pace preference
+    if soft.pace_preference == "relaxed":
+        reasons.append("relaxed-pace friendly")
+    elif soft.pace_preference == "packed":
+        reasons.append("high-value stop — keeps your pace")
 
-    # sc1/sc4 — time-of-day alignment
-    if soft.preferred_time_of_day == "morning" and a.optimal_visit_time:
-        opt_start = a.optimal_visit_time.split("-")[0] if "-" in a.optimal_visit_time else ""
-        if opt_start and opt_start < "13:00":
-            reasons.append("best visited in the morning")
+    # sc1/sc4 — time-of-day alignment (outdoor)
+    if soft.preferred_time_of_day == "morning" and a.is_outdoor:
+        reasons.append("outdoor — best visited in the morning")
 
     # fallback — always show FTRM score
     reasons.append(f"FTRM score {score.S_pti:.2f}")
@@ -246,20 +244,9 @@ class CrowdAdvisory:
         t_cur    = dtime(h, m)
         end_time = dtime(20, 0)
 
-        _dep        = getattr(constraints.hard, "departure_date", None)
-        _trip_month = _dep.month if _dep is not None else 0
-        _group = (
-            (constraints.hard.group_size or 0)
-            or constraints.hard.total_travelers
-            or 1
-        ) if constraints.hard else 1
-
         scorer = AttractionScorer(
             Tmax_minutes=remaining_minutes,
             constraints=constraints,
-            trip_month=_trip_month,
-            group_size=_group,
-            traveler_ages=constraints.hard.traveler_ages if constraints.hard else [],
         )
 
         # ── 3. Score the pool, excluding the crowded stop itself ──────────────

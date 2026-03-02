@@ -317,6 +317,6 @@ def _why_weather_suitable(a: AttractionRecord, constraints: ConstraintBundle) ->
     soft = constraints.soft
     if soft.interests and a.category.lower() in [i.lower() for i in soft.interests]:
         reasons.append(f"matches your interest in '{a.category}'")
-    if soft.pace_preference == "relaxed" and a.intensity_level == "low":
-        reasons.append("low intensity — suits relaxed pace")
+    if not a.is_outdoor:
+        reasons.append("indoor — fully weather-protected")
     return "; ".join(reasons)

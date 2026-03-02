@@ -3,22 +3,22 @@ modules/optimization/constraint_registry.py
 ---------------------------------------------
 Central HC Registry: evaluates all hard constraints per POI type.
 
-Resolution 2: Extended HC coverage across all POI categories.
+Simplified to API-Verified constraints only (per 07-simplified-model.md).
 
 For each POI type, returns a list of hcm_pti ∈ {0,1}.
 HC_pti = Π hcm_pti  (Eq 1) — computed by caller via compute_HC().
 
 Registered HC checks per category:
 
-  ATTRACTION:
-    hc1 — opening_hours gate
-    hc2 — time-budget feasibility (elapsed + Dij + STi ≤ Tmax)
-    hc3 — accessibility (wheelchair if required)
-    hc4 — age restriction (min_age ≤ youngest traveller age)
-    hc5 — permit required (ticket_required & permit_available)
-    hc6 — group size (min_group_size ≤ group_size ≤ max_group_size)
-    hc7 — seasonal closure (trip month must be in seasonal_open_months)
-    hc8 — minimum visit duration feasible (remaining ≥ Dij + min_visit_duration)
+  ATTRACTION (simplified):
+    hc1 — opening_hours gate                 (Google Places data)
+    hc2 — time-budget feasibility            (elapsed + Dij + STi ≤ Tmax)
+    hc3 — wheelchair accessibility           (if traveler requires it)
+    hc4 — minimum visit duration feasible    (remaining ≥ Dij + min_visit_duration)
+
+  REMOVED from ATTRACTION (no API source):
+    BREAKING_CHANGE: hc4 (min_age), hc5 (ticket_required),
+    hc6 (group size bounds), hc7 (seasonal_open_months)
 
   HOTEL:
     hc1 — price_per_night ≤ nightly_budget
@@ -84,14 +84,27 @@ def evaluate_hc(poi_type: str, poi_data: dict, context: dict) -> list[int]:
     return fn(poi_data, context)
 
 
+# evaluate_hc context keys for "attraction" (simplified):
+#   t_cur               : datetime.time    — current time
+#   elapsed_min         : float            — minutes used in day so far
+#   Tmax_min            : float            — total daily time budget (minutes)
+#   Dij_minutes         : float            — travel time to this attraction
+#   requires_wheelchair : bool
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ATTRACTION
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _hc_attraction(poi: dict, ctx: dict) -> list[int]:
+    """
+    Simplified HC for attractions: hc1–hc4 only.
+    Removed (no API source): hc4 min_age, hc5 ticket_required,
+    hc6 group size, hc7 seasonal — BREAKING_CHANGE.
+    """
     results: list[int] = []
 
-    # hc1 — opening hours
+    # hc1 — opening hours gate  (Google Places regularOpeningHours)
     oh = poi.get("opening_hours", "")
     t_cur: dtime = ctx.get("t_cur", dtime(9, 0))
     if oh and "-" in oh:
@@ -99,7 +112,7 @@ def _hc_attraction(poi: dict, ctx: dict) -> list[int]:
         within = TimeTool.is_within_window(t_cur, parts[0].strip(), parts[1].strip())
         results.append(1 if within else 0)
     else:
-        results.append(1)  # unknown → allow
+        results.append(1)  # NULL opening_hours → conservative allow
 
     # hc2 — time-budget feasibility (Tmax)
     elapsed   = ctx.get("elapsed_min", 0.0)
@@ -108,44 +121,13 @@ def _hc_attraction(poi: dict, ctx: dict) -> list[int]:
     visit_dur = poi.get("visit_duration_minutes", 60.0)
     results.append(1 if elapsed + Dij + visit_dur <= Tmax else 0)
 
-    # hc3 — accessibility
+    # hc3 — wheelchair accessibility  (Google Places accessibilityOptions)
     if ctx.get("requires_wheelchair", False):
         results.append(1 if poi.get("wheelchair_accessible", True) else 0)
     else:
         results.append(1)  # not required → satisfied
 
-    # hc4 — age restriction
-    # Use the YOUNGEST traveller age; if traveler_ages is empty, skip check.
-    traveler_ages: list[int] = ctx.get("traveler_ages", [])
-    min_age: int = poi.get("min_age", 0)
-    if traveler_ages and min_age > 0:
-        youngest = min(traveler_ages)
-        results.append(1 if youngest >= min_age else 0)
-    else:
-        results.append(1)  # no age data or no restriction → satisfied
-
-    # hc5 — permit/ticket availability
-    if poi.get("ticket_required", False):
-        results.append(1 if ctx.get("permit_available", True) else 0)
-    else:
-        results.append(1)
-
-    # hc6 — group size (venue capacity)
-    group_size: int = ctx.get("group_size", 1)
-    min_grp: int = poi.get("min_group_size", 1)
-    max_grp: int = poi.get("max_group_size", 999)
-    results.append(1 if min_grp <= group_size <= max_grp else 0)
-
-    # hc7 — seasonal closure
-    # If seasonal_open_months is non-empty, the trip month must be in the list.
-    seasonal: list[int] = poi.get("seasonal_open_months", [])
-    trip_month: int = ctx.get("trip_month", 0)  # 0 = unknown → allow
-    if seasonal and trip_month:
-        results.append(1 if trip_month in seasonal else 0)
-    else:
-        results.append(1)  # open all year or month unknown → allow
-
-    # hc8 — minimum visit duration feasible
+    # hc4 — minimum visit duration feasible (was hc8; renamed after removing hc4–hc7)
     # Remaining time after travel must accommodate at least the minimum visit length.
     min_visit: int = poi.get("min_visit_duration_minutes", 0)
     remaining_after_travel = Tmax - elapsed - Dij

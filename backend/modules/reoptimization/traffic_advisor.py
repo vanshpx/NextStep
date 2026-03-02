@@ -156,8 +156,8 @@ def _why_traffic_suitable(
         reasons.append(f"matches interest in '{a.category}'")
     if not getattr(a, "is_outdoor", False):
         reasons.append("indoor — avoids weather+traffic exposure")
-    if soft.pace_preference == "relaxed" and a.intensity_level == "low":
-        reasons.append("low intensity — suits relaxed pace")
+    if soft.pace_preference == "relaxed":
+        reasons.append("relaxed-pace friendly")
     reasons.append(f"η_ij_new = S/Dij")
     return "; ".join(reasons) if reasons else "ranked by η_ij = S_pti/Dij_new"
 

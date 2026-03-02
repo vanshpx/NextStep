@@ -38,6 +38,8 @@ from schemas.constraints import ConstraintBundle
 from schemas.itinerary import BudgetAllocation, DayPlan, Itinerary
 from modules.tool_usage.attraction_tool import AttractionRecord
 from modules.tool_usage.historical_tool import HistoricalInsightTool
+from modules.tool_usage.weather_tool import WeatherTool
+from modules.tool_usage.traffic_tool import TrafficTool
 from modules.reoptimization.trip_state import TripState
 from modules.reoptimization.event_handler import EventHandler, EventType, ReplanDecision
 from modules.reoptimization.condition_monitor import ConditionMonitor
@@ -52,6 +54,23 @@ from modules.reoptimization.user_edit_handler import (
 from modules.reoptimization.hunger_fatigue_advisor import (
     HungerFatigueAdvisor, HungerAdvisoryResult, FatigueAdvisoryResult,
 )
+from modules.memory.short_term_memory import ShortTermMemory
+from modules.reoptimization.local_repair import LocalRepair, RepairResult
+from modules.reoptimization.alternative_generator import (
+    AlternativeGenerator, AlternativeOption,
+)
+from modules.reoptimization.agent_action import ActionType, AgentAction
+from modules.reoptimization.agent_controller import AgentController, AgentObservation
+from modules.reoptimization.execution_layer import ExecutionLayer, ExecutionResult
+from modules.reoptimization.agents.base_agent import AgentContext
+from modules.reoptimization.agents.orchestrator_agent import OrchestratorAgent, OrchestratorResult
+from modules.reoptimization.agents.disruption_agent import DisruptionAgent
+from modules.reoptimization.agents.planning_agent import PlanningAgent
+from modules.reoptimization.agents.budget_agent import BudgetAgent
+from modules.reoptimization.agents.preference_agent import PreferenceAgent
+from modules.reoptimization.agents.memory_agent import MemoryAgent
+from modules.reoptimization.agents.explanation_agent import ExplanationAgent
+from modules.reoptimization.agents.agent_dispatcher import AgentDispatcher, DispatchResult
 
 
 @dataclass
@@ -136,6 +155,45 @@ class ReOptimizationSession:
         self._disruption_memory    = DisruptionMemory()
         self._user_edit            = UserEditHandler()
         self._hf_advisor           = HungerFatigueAdvisor()
+        self._weather_tool         = WeatherTool()
+        self._traffic_tool         = TrafficTool()
+        self._local_repair_engine  = LocalRepair()
+        self._alt_generator        = AlternativeGenerator(
+            historical_tool=HistoricalInsightTool()
+        )
+        self._stm                  = ShortTermMemory()
+        self._agent_controller     = AgentController(
+            condition_monitor=self._condition_monitor,
+            disruption_memory=self._disruption_memory,
+            short_term_memory=self._stm,
+            weather_tool=self._weather_tool,
+            traffic_tool=self._traffic_tool,
+        )
+        self._execution_layer      = ExecutionLayer(
+            local_repair=self._local_repair_engine,
+            partial_replanner=self._partial_replanner,
+            alt_generator=self._alt_generator,
+            stm=self._stm,
+        )
+
+        # ── Multi-agent dispatcher ────────────────────────────────────────────
+        self._orchestrator = OrchestratorAgent()
+        self._specialists: dict[str, object] = {
+            "DisruptionAgent":  DisruptionAgent(),
+            "PlanningAgent":    PlanningAgent(),
+            "BudgetAgent":      BudgetAgent(),
+            "PreferenceAgent":  PreferenceAgent(),
+            "MemoryAgent":      MemoryAgent(),
+            "ExplanationAgent": ExplanationAgent(),
+        }
+        self._dispatcher = AgentDispatcher(
+            orchestrator=self._orchestrator,
+            specialists=self._specialists,  # type: ignore[arg-type]
+            execution_layer=self._execution_layer,
+            stm=self._stm,
+        )
+        # Restaurant pool — populated externally via set_restaurant_pool()
+        self._restaurant_pool: list = []
 
         # Destination city for historical insight lookup
         self._city = constraints.hard.destination_city if constraints.hard else ""
@@ -187,6 +245,7 @@ class ReOptimizationSession:
         )
         return cls(
             state=state,
+            # restaurant_pool can be set after construction via set_restaurant_pool()
             constraints=constraints,
             remaining_attractions=remaining_attractions,
             budget=itinerary.budget,
@@ -218,7 +277,11 @@ class ReOptimizationSession:
         # Update remaining pool
         self._remaining = [a for a in self._remaining if a.name not in self.state.visited_stops]
         self._condition_monitor.update_remaining(self._remaining)
-        print(f"  [Session] Visited '{stop_name}' at {self.state.current_time}. "
+        print(f"  [Session] Visited '{stop_name}' at {self.state.current_time}.")
+        print(f"  [Session] Remaining stops: {len(self._remaining)}")
+        # keep only for internal reference; remove the old combined print
+        if False:  # replaced above
+            print(f"  [Session] Visited '{stop_name}' at {self.state.current_time}. "
               f"Remaining stops: {len(self._remaining)}")
 
     # ── Environmental condition check ────────────────────────────────────────
@@ -235,6 +298,11 @@ class ReOptimizationSession:
         """
         Feed real-time environmental data into ConditionMonitor.
 
+        When weather_condition or traffic_level are not supplied, this method
+        auto-fetches live readings from WeatherTool / TrafficTool using the
+        current position stored in self.state (requires USE_STUB_WEATHER=false
+        / USE_STUB_TRAFFIC=false and valid API keys).
+
         APPROVAL GATE — if a threshold is exceeded the method does NOT
         automatically replan.  Instead it:
           1. Freezes the current itinerary (no state mutation).
@@ -248,6 +316,38 @@ class ReOptimizationSession:
             session.resolve_pending("REJECT")    — keep unchanged
             session.resolve_pending("MODIFY", action_index=<int>)
         """
+        # ── Auto-fetch weather from OpenWeatherMap when not manually supplied ─
+        if weather_condition is None:
+            try:
+                w = self._weather_tool.fetch(
+                    lat=self.state.current_lat,
+                    lon=self.state.current_lon,
+                )
+                if not w.is_stub:
+                    weather_condition = w.condition
+            except Exception:
+                pass  # remain None → ConditionMonitor will skip weather check
+
+        # ── Auto-fetch traffic from Google Routes API when not manually supplied
+        if traffic_level is None and next_stop_name:
+            next_stop = next(
+                (a for a in self._remaining if a.name == next_stop_name), None
+            )
+            if next_stop is not None:
+                try:
+                    t = self._traffic_tool.fetch(
+                        origin_lat=self.state.current_lat,
+                        origin_lon=self.state.current_lon,
+                        dest_lat=next_stop.location_lat,
+                        dest_lon=next_stop.location_lon,
+                    )
+                    if not t.is_stub:
+                        traffic_level = t.traffic_level
+                        if estimated_traffic_delay_minutes == 0:
+                            estimated_traffic_delay_minutes = int(t.delay_minutes)
+                except Exception:
+                    pass  # remain None → ConditionMonitor will skip traffic check
+
         # Guard: only one pending decision at a time
         if self.pending_decision is not None:
             print("  [Gate] A disruption is already awaiting your decision.")
@@ -388,15 +488,51 @@ class ReOptimizationSession:
             if scores_for_impacted else 0.0
         )
 
-        # ── Suggested alternatives (top-3 remaining not already impacted) ────
-        alts_pool = [
+        # ── Context-aware alternatives via AlternativeGenerator ─────────────
+        primary_disrupted = impacted_pois[0] if impacted_pois else ""
+        primary_rec = next(
+            (a for a in self._remaining if a.name == primary_disrupted), None
+        )
+        candidates_pool = [
             a for a in self._remaining
             if a.name not in impacted_pois
             and a.name not in self.state.visited_stops
             and a.name not in self.state.skipped_stops
         ]
-        alts_pool.sort(key=lambda a: a.rating, reverse=True)
-        suggested_alternatives = [a.name for a in alts_pool[:3]]
+        from datetime import time as _dtime
+        try:
+            _h, _m = map(int, self.state.current_time.split(":"))
+            _t_cur = _dtime(_h, _m)
+        except (ValueError, AttributeError):
+            _t_cur = _dtime(9, 0)
+
+        _current_weather = weather_condition or "clear"
+        alt_context = {
+            "current_lat":        self.state.current_lat,
+            "current_lon":        self.state.current_lon,
+            "current_time":       _t_cur,
+            "weather_condition":  _current_weather,
+            "crowd_forecast":     {},          # can be injected in future
+            "meal_lunch_window":  (
+                self.constraints.soft.meal_lunch_window
+                if self.constraints and self.constraints.soft else ("12:00", "14:00")
+            ),
+            "meal_dinner_window": (
+                self.constraints.soft.meal_dinner_window
+                if self.constraints and self.constraints.soft else ("19:00", "21:00")
+            ),
+            "n_alternatives":     5,
+        }
+        disrupted_category = getattr(primary_rec, "category", "Attraction") if primary_rec else "Attraction"
+        rich_alternatives: list[AlternativeOption] = self._alt_generator.generate(
+            disrupted_poi_name = primary_disrupted,
+            disrupted_category = disrupted_category,
+            candidates         = candidates_pool,
+            restaurant_pool    = self._restaurant_pool,
+            context            = alt_context,
+        )
+        # Backwards-compat: keep name list in suggested_alternatives
+        suggested_alternatives = [a.name for a in rich_alternatives]
 
         # ── Build and store PendingDecision ──────────────────────────────────
         self.pending_decision = PendingDecision(
@@ -409,6 +545,8 @@ class ReOptimizationSession:
             severity            = severity,
             _raw_decisions      = candidates,
         )
+        # Attach rich alternatives as extra attribute (not in dataclass)
+        self.pending_decision._rich_alternatives = rich_alternatives  # type: ignore[attr-defined]
 
         self._print_pending_decision(self.pending_decision)
         return None   # ← NO automatic replan; user must call resolve_pending()
@@ -421,167 +559,208 @@ class ReOptimizationSession:
         action_index: int | None = None,
     ) -> Optional[DayPlan]:
         """
-        Apply user's response to the last detected disruption.
+        Apply user's response to the last disruption gate.
+
+        Accepted tokens (case-insensitive):
+          "WAIT"              — Defer disrupted POI; freeze schedule; no mutation.
+          "REPLACE" / "REPLACE <n>" — Replace only the disrupted POI with
+                                 alternative at rank n (1-based). Recalculate
+                                 timing from that point; all other POIs unchanged.
+          "SKIP"              — Remove disrupted POI permanently; keep rest intact.
+          "KEEP"              — Proceed with original plan; clear pending gate.
+
+        Legacy aliases (backwards-compatible with existing demo CLI):
+          "APPROVE"  →  equivalent to the first proposed_action (usually DEFER/REPLACE)
+          "REJECT"   →  equivalent to KEEP
+          "MODIFY"   →  equivalent to REPLACE with action_index
 
         Args:
-            user_decision:  "APPROVE" | "REJECT" | "MODIFY"
-            action_index:   (MODIFY only) index into pending_decision.proposed_actions
+            user_decision:  one of the tokens above
+            action_index:   (REPLACE / MODIFY only) 1-based rank of chosen alternative
 
         Returns:
-            New DayPlan if a replan was triggered, else None.
+            New DayPlan if replan was triggered, else None.
         """
         if self.pending_decision is None:
             print("  [Gate] No pending disruption. Call check_conditions() first.")
             return None
 
-        pd = self.pending_decision
-        W  = 64
+        pd  = self.pending_decision
+        W   = 60
+        dec = user_decision.strip().upper()
 
-        # ── REJECT — keep itinerary unchanged ───────────────────────────────
-        if user_decision.upper() == "REJECT":
+        # ── Normalise legacy aliases ─────────────────────────────────────────
+        if dec == "REJECT":
+            dec = "KEEP"
+        elif dec == "APPROVE":
+            dec = "WAIT"   # closest semantic match to old approve-first-action
+        elif dec == "MODIFY":
+            dec = "REPLACE"
+
+        # Parse "REPLACE 2" style input where index comes after the token
+        _replace_idx: int | None = action_index
+        if dec.startswith("REPLACE"):
+            parts = dec.split()
+            dec = "REPLACE"
+            if len(parts) > 1:
+                try:
+                    _replace_idx = int(parts[1])  # 1-based rank
+                except ValueError:
+                    pass
+
+        # ── KEEP — no mutation, clear gate ───────────────────────────────────
+        if dec == "KEEP":
             print(f"\n  [Gate] {'═' * W}")
-            print(f"  [Gate] Decision: REJECT — itinerary unchanged.")
+            print(f"  [Gate] Decision: KEEP — proceeding with original plan.")
             print(f"  [Gate] {'═' * W}\n")
             self._disruption_memory.record_generic(
                 disruption_type = pd.disruption_type,
                 severity        = pd.severity,
-                action_taken    = "REJECT",
-                user_response   = "REJECT",
+                action_taken    = "KEEP",
+                user_response   = "KEEP",
                 impacted_stops  = pd.impacted_pois,
             )
             self.pending_decision = None
             return None
 
-        # ── APPROVE — execute the pending action ───────────────────────────────
-        if user_decision.upper() == "APPROVE":
+        # ── WAIT — defer disrupted POI; schedule frozen; no full replan ───────
+        if dec == "WAIT":
             print(f"\n  [Gate] {'═' * W}")
-            print(f"  [Gate] Decision: APPROVE — applying change…")
+            print(f"  [Gate] Decision: WAIT — deferring to later today.")
             print(f"  [Gate] {'═' * W}\n")
-            result: Optional[DayPlan] = None
-
-            if pd._user_event_type:
-                # User-triggered action: reconstruct EventType and execute
-                ev_type = next(
-                    (e for e in EventType if e.value == pd._user_event_type), None
-                )
-                if ev_type:
-                    result = self._execute_user_event(ev_type, pd._user_event_payload)
-            else:
-                # Environmental trigger: route through normal handlers
-                for d in pd._raw_decisions:
-                    if d.metadata.get("crowd_action"):
-                        result = self._handle_crowd_action(d)
-                    elif d.metadata.get("weather_action"):
-                        result = self._handle_weather_action(d)
-                    elif d.metadata.get("traffic_action"):
-                        result = self._handle_traffic_action(d)
-                    else:
-                        result = self._do_replan(reasons=[d.reason])
-
+            for stop in pd.impacted_pois:
+                self.state.defer_stop(stop)
             self._disruption_memory.record_generic(
-                disruption_type = pd.disruption_type or pd._user_event_type,
+                disruption_type = pd.disruption_type,
                 severity        = pd.severity,
-                action_taken    = "APPROVE",
-                user_response   = "APPROVE",
+                action_taken    = "WAIT",
+                user_response   = "WAIT",
+                impacted_stops  = pd.impacted_pois,
+            )
+            self.pending_decision = None
+            return None   # ← no schedule rebuild; frozen
+
+        # ── SKIP — remove only the disrupted POI; rest unchanged ──────────────
+        if dec == "SKIP":
+            print(f"\n  [Gate] {'═' * W}")
+            print(f"  [Gate] Decision: SKIP — removing disrupted stop.")
+            print(f"  [Gate] {'═' * W}\n")
+            for stop in pd.impacted_pois:
+                self.state.mark_skipped(stop)
+            # Recalculate timing for remaining stops (local repair only)
+            _skip_pool = [
+                a for a in self._remaining
+                if a.name not in self.state.skipped_stops
+                   and a.name not in self.state.visited_stops
+                   and a.name not in self.state.deferred_stops
+            ]
+            _skip_stop = pd.impacted_pois[0] if pd.impacted_pois else ""
+            _is_user_initiated_skip = pd._user_event_type in (
+                "user_skip", "user_skip_current",
+            )
+            repair_result = self._local_repair_engine.repair(
+                disrupted_stop_name = _skip_stop,
+                current_plan        = self.state.current_day_plan,
+                state               = self.state,
+                remaining_pool      = _skip_pool,
+                constraints         = self.constraints,
+                disruption_type     = pd.disruption_type,
+                is_user_skip        = _is_user_initiated_skip,
+            ) if (self.state.current_day_plan and _skip_stop) else None
+            self._disruption_memory.record_generic(
+                disruption_type = pd.disruption_type,
+                severity        = pd.severity,
+                action_taken    = "SKIP",
+                user_response   = "SKIP",
+                impacted_stops  = pd.impacted_pois,
+            )
+            self.pending_decision = None
+            new_plan = getattr(repair_result, "updated_plan", None)
+            if new_plan is not None:
+                self.state.current_day_plan = new_plan
+            self._handle_empty_day(repair_result)
+            return new_plan
+
+        # ── REPLACE — swap only the disrupted POI with chosen alternative ─────
+        if dec == "REPLACE":
+            rich = getattr(pd, "_rich_alternatives", [])
+            idx  = (_replace_idx - 1) if _replace_idx is not None else 0  # convert 1-based → 0-based
+            if not rich:
+                print("  [Gate] No rich alternatives available — use SKIP or KEEP.")
+                self.pending_decision = None
+                return None
+            if idx < 0 or idx >= len(rich):
+                print(f"  [Gate] Invalid alternative index {idx + 1} "
+                      f"(valid: 1–{len(rich)}).")
+                return None
+
+            chosen_alt = rich[idx]
+            print(f"\n  [Gate] {'═' * W}")
+            print(f"  [Gate] Decision: REPLACE with '{chosen_alt.name}'")
+            print(f"  [Gate] Distance: {chosen_alt.distance_km:.1f} km  "
+                  f"Travel: {chosen_alt.travel_time_min} min  "
+                  f"Crowd: {chosen_alt.predicted_crowd:.0%}")
+            print(f"  [Gate] {'═' * W}\n")
+
+            # Remove disrupted POIs from plan; inject chosen alternative
+            for stop in pd.impacted_pois:
+                self.state.mark_skipped(stop)
+
+            # Find or build a record for the chosen alternative
+            alt_rec = next(
+                (a for a in self._remaining if a.name == chosen_alt.name), None
+            )
+            if alt_rec is None:
+                # Try full pool fetch as fallback
+                try:
+                    from modules.tool_usage.attraction_tool import AttractionTool
+                    all_recs = AttractionTool().fetch(self._city)
+                    alt_rec  = next(
+                        (a for a in all_recs if a.name == chosen_alt.name), None
+                    )
+                except Exception:
+                    pass
+
+            if alt_rec and alt_rec not in self._remaining:
+                self._remaining.append(alt_rec)
+                self._condition_monitor.update_remaining(self._remaining)
+
+            # Replan timing from current position (local repair, not full ACO)
+            result = self._do_replan(
+                reasons=[f"REPLACE: {pd.impacted_pois} → {chosen_alt.name}"]
+            )
+            self._disruption_memory.record_generic(
+                disruption_type = pd.disruption_type,
+                severity        = pd.severity,
+                action_taken    = f"REPLACE→{chosen_alt.name}",
+                user_response   = "REPLACE",
                 impacted_stops  = pd.impacted_pois,
             )
             self.pending_decision = None
             return result
 
-        # ── MODIFY — apply one specific ProposedAction ───────────────────────
-        if user_decision.upper() == "MODIFY":
-            if action_index is None:
-                print("  [Gate] MODIFY requires action_index=<int>.")
-                return None
-            if action_index < 0 or action_index >= len(pd.proposed_actions):
-                print(f"  [Gate] action_index {action_index} out of range "
-                      f"(0–{len(pd.proposed_actions)-1}).")
-                return None
+        # ── Unknown token ─────────────────────────────────────────────────────
+        if True:   # placeholder so next block is a real else
+            pass
 
-            chosen = pd.proposed_actions[action_index]
-            print(f"\n  [Gate] {'═' * W}")
-            print(f"  [Gate] Decision: MODIFY → "
-                  f"{chosen.action_type}  '{chosen.target_stop}'")
-            if chosen.details:
-                print(f"  [Gate] Details: {chosen.details}")
-            print(f"  [Gate] {'═' * W}\n")
-
-            if chosen.action_type in ("APPLY_CHANGE", "SUGGEST_ALTERNATIVES"):
-                # For user-triggered events this is equivalent to APPROVE
-                if pd._user_event_type:
-                    ev_type = next(
-                        (e for e in EventType if e.value == pd._user_event_type), None
-                    )
-                    mod_result: Optional[DayPlan] = (
-                        self._execute_user_event(ev_type, pd._user_event_payload)
-                        if ev_type else None
-                    )
-                else:
-                    mod_result = self._do_replan(reasons=[f"MODIFY:{chosen.action_type}"])
-
-            elif chosen.action_type == "DEFER_CHANGE":
-                if chosen.target_stop:
-                    self.state.defer_stop(chosen.target_stop)
-                mod_result = self._do_replan(reasons=["MODIFY:DEFER_CHANGE"])
-
-            elif chosen.action_type == "DEFER":
-                self.state.defer_stop(chosen.target_stop)
-                mod_result = self._do_replan(reasons=["MODIFY:DEFER"])
-
-            elif chosen.action_type == "REPLACE":
-                self.state.mark_skipped(chosen.target_stop)
-                # Inject first suggested alternative into the pool
-                if pd.suggested_alternatives:
-                    alt_name = pd.suggested_alternatives[0]
-                    alt_rec  = next(
-                        (a for a in self._remaining if a.name == alt_name), None
-                    )
-                    if alt_rec is None:
-                        from modules.tool_usage.attraction_tool import AttractionTool
-                        all_recs = AttractionTool().fetch(self._city)
-                        alt_rec  = next(
-                            (a for a in all_recs if a.name == alt_name), None
-                        )
-                    if alt_rec and alt_rec not in self._remaining:
-                        self._remaining.append(alt_rec)
-                        self._condition_monitor.update_remaining(self._remaining)
-                mod_result = self._do_replan(reasons=["MODIFY:REPLACE"])
-
-            elif chosen.action_type == "SHIFT_TIME":
-                delay = chosen.details.get("delay_minutes", 30) if chosen.details else 30
-                h, m = map(int, self.state.current_time.split(":"))
-                total = h * 60 + m + delay
-                self.state.advance_time(f"{total // 60:02d}:{total % 60:02d}")
-                mod_result = self._do_replan(reasons=["MODIFY:SHIFT_TIME"])
-
-            elif chosen.action_type == "KEEP_AS_IS":
-                mod_result = None
-
-            else:
-                mod_result = self._do_replan(reasons=[f"MODIFY:{chosen.action_type}"])
-
-            self._disruption_memory.record_generic(
-                disruption_type = pd.disruption_type or pd._user_event_type,
-                severity        = pd.severity,
-                action_taken    = f"MODIFY:{chosen.action_type}",
-                user_response   = f"MODIFY:{chosen.action_type}",
-                impacted_stops  = pd.impacted_pois,
-            )
-            self.pending_decision = None
-
-            if chosen.action_type == "KEEP_AS_IS":
-                print(f"  [Gate] Proceeding as-is — no replan.")
-                return None
-
-            return mod_result
-
+        # ── Fallback for any unrecognised token ──────────────────────────────
         print(f"  [Gate] Unknown decision '{user_decision}'. "
-              "Use APPROVE | REJECT | MODIFY.")
+              "Use: WAIT | REPLACE [index] | SKIP | KEEP")
         return None
 
+
+
+    def set_restaurant_pool(self, restaurants: list) -> None:
+        """Provide a list of RestaurantRecord objects for meal-window alternatives."""
+        self._restaurant_pool = list(restaurants)
+
     def _print_pending_decision(self, pd: PendingDecision) -> None:
-        """Print the structured disruption payload for user review."""
-        W   = 54
+        """
+        Print the structured disruption payload for user review.
+        Displays rich AlternativeOption detail (distance, crowd, FTRM, history)
+        and the mandatory 4-option decision menu.
+        """
+        W   = 60
         sep = "═" * W
 
         if pd._user_event_type:
@@ -592,39 +771,121 @@ class ReOptimizationSession:
         print(f"\n  {sep}")
         print(f"  {header_line}")
         print(f"  {sep}")
+
+        # ── Reason banner ────────────────────────────────────────────────────
         if pd._user_event_type:
-            print(f"  Action    : {pd._user_event_type}")
-        print(f"  Type      : {pd.disruption_type}")
-        print(f"  Reason    : {pd.reason}")
-        print(f"  Impacted  : {pd.impacted_pois}")
+            print(f"  Action   : {pd._user_event_type}")
+        print(f"  Type     : {pd.disruption_type}")
+        print(f"  {pd.reason}")
+        if pd.impacted_pois:
+            print(f"  Impacted : {', '.join(pd.impacted_pois)}")
         if not pd._user_event_type:
             print(f"  Value at risk (avg S_pti proxy): {pd.missed_value:.2f}")
-        print()
 
+        # ── Impact summary (user-action gate) ────────────────────────────────
         if pd.impact_summary:
+            print()
             print(f"  IMPACT SUMMARY:")
             for k, v in pd.impact_summary.items():
                 print(f"    {k:<26}: {v}")
+
+        # ── Rich alternatives ─────────────────────────────────────────────────
+        rich = getattr(pd, "_rich_alternatives", [])
+        if rich:
             print()
-
-        print(f"  PROPOSED ACTIONS:")
-        for i, act in enumerate(pd.proposed_actions):
-            detail_str = (
-                "  →  " + "  ".join(f"{k}: {v}" for k, v in act.details.items())
-                if act.details else ""
-            )
-            print(f"    [{i}] {act.action_type:<20}  {act.target_stop}{detail_str}")
-
-        if pd.suggested_alternatives:
+            print(f"  ALTERNATIVES (ranked by distance · crowd · FTRM · weather):")
+            for alt in rich:
+                print(alt.describe(alt.rank))
+        elif pd.suggested_alternatives:
             print()
             print(f"  BEST ALTERNATIVES: {pd.suggested_alternatives}")
 
+        # ── 4-option decision menu ────────────────────────────────────────────
         print()
-        print(f"  → session.resolve_pending(\"APPROVE\")")
-        print(f"     session.resolve_pending(\"REJECT\")")
-        if pd.proposed_actions:
-            print(f"     session.resolve_pending(\"MODIFY\", action_index=0..{len(pd.proposed_actions)-1})")
+        print(f"  HOW WOULD YOU LIKE TO PROCEED?")
+        print(f"    [1] WAIT   — defer to a later time today (no schedule change)")
+        if rich:
+            print(f"    [2] REPLACE <index>  — replace with one of the alternatives above")
+        else:
+            print(f"    [2] REPLACE — replace with a suggested alternative")
+        print(f"    [3] SKIP   — remove this stop permanently")
+        print(f"    [4] KEEP   — proceed with original plan despite disruption")
+        print()
+        print(f"  resolve_pending(\"WAIT\")")
+        if rich:
+            print(f"  resolve_pending(\"REPLACE\", action_index=<1–{len(rich)}>)")
+        else:
+            print(f"  resolve_pending(\"REPLACE\")")
+        print(f"  resolve_pending(\"SKIP\")")
+        print(f"  resolve_pending(\"KEEP\")")
         print(f"  {sep}\n")
+
+    # ── Empty day handler ─────────────────────────────────────────────────────
+
+    def _handle_empty_day(self, repair_result) -> None:
+        """
+        When repair leaves the day with zero non-meal POIs, call
+        AlternativeGenerator to propose the top 3 alternatives.
+
+        Prints suggestions for the user — does NOT auto-inject.
+        """
+        if repair_result is None:
+            return
+        plan = getattr(repair_result, "updated_plan", None)
+        if plan is None:
+            return
+        from modules.reoptimization.local_repair import _is_meal as _is_meal_rp
+        non_meal = [rp for rp in plan.route_points if not _is_meal_rp(rp)]
+        if non_meal:
+            return  # day still has POIs
+
+        # Build candidate pool
+        candidates = [
+            a for a in self._remaining
+            if a.name not in self.state.visited_stops
+            and a.name not in self.state.skipped_stops
+            and a.name not in self.state.deferred_stops
+        ]
+        if not candidates:
+            print("  [EmptyDay] Day has no POIs and the attraction pool is empty.")
+            return
+
+        from datetime import time as _dtime
+        try:
+            _h, _m = map(int, self.state.current_time.split(":"))
+            _t_cur = _dtime(_h, _m)
+        except (ValueError, AttributeError):
+            _t_cur = _dtime(9, 0)
+
+        suggestions = self._alt_generator.generate(
+            disrupted_poi_name="",
+            disrupted_category="Attraction",
+            candidates=candidates,
+            restaurant_pool=self._restaurant_pool,
+            context={
+                "current_lat":  self.state.current_lat,
+                "current_lon":  self.state.current_lon,
+                "current_time": _t_cur,
+                "weather_condition": "clear",
+                "crowd_forecast": {},
+                "n_alternatives": 3,
+            },
+        )
+
+        if not suggestions:
+            print("  [EmptyDay] Day has no POIs — no suitable alternatives found.")
+            return
+
+        W = 60
+        sep = "─" * W
+        print(f"\n  {sep}")
+        print(f"  DAY IS EMPTY — here are top alternatives you can add:")
+        print(f"  {sep}")
+        for alt in suggestions:
+            print(alt.describe(alt.rank))
+        print(f"  {sep}")
+        print(f"  Type  replace  to swap in a POI, or  continue  to end the day.")
+        print()
 
 
     # ── User-action approval gate helpers ─────────────────────────────────────
@@ -922,6 +1183,16 @@ class ReOptimizationSession:
         if decision.metadata.get("user_edit_action"):
             return self._handle_user_edit_action(decision)
 
+        # Rule 9: preference change — update scoring weights only, no replan
+        if event_type == EventType.USER_PREFERENCE_CHANGE:
+            field = payload.get("field", "")
+            value = payload.get("value", "")
+            print(
+                f"  [Session] Preference '{field} → {value}' applied.  "
+                f"Scoring weights updated — no immediate replan (Rule 9)."
+            )
+            return None
+
         return self._do_replan(reasons=[decision.reason])
 
     # ── Direct event API ─────────────────────────────────────────────────────
@@ -1033,13 +1304,23 @@ class ReOptimizationSession:
 
         # ── Execute strategy ─────────────────────────────────────────────────
         if crowd_action == "reschedule_same_day":
-            result = self._do_replan(reasons=[decision.reason])
+            # §2: single-POI crowd → LocalRepair shifts stop to later slot (§5 recheck)
+            result = self._run_local_repair(
+                stop, "CROWD", decision.reason,
+                allow_shift=True, allow_replace=True,
+                crowd_level=crowd_level, crowd_threshold=threshold,
+            )
             self.state.undefer_stop(stop)
             return result
 
         if crowd_action == "reschedule_future_day":
             self.future_deferred[stop] = target_day
-            return self._do_replan(reasons=[decision.reason])
+            # Stop must leave today's plan; shift/replace not wanted
+            return self._run_local_repair(
+                stop, "CROWD", decision.reason,
+                allow_shift=False, allow_replace=False,
+                crowd_level=crowd_level, crowd_threshold=threshold,
+            )
 
         if crowd_action == "inform_user":
             self.crowd_pending_decision = {
@@ -1050,7 +1331,10 @@ class ReOptimizationSession:
             }
             return None
 
-        return self._do_replan(reasons=[decision.reason])
+        return self._run_local_repair(
+            stop, "CROWD", decision.reason,
+            crowd_level=crowd_level, crowd_threshold=threshold,
+        )
 
     def _print_crowd_advisory(
         self,
@@ -1080,8 +1364,7 @@ class ReOptimizationSession:
             for i, alt in enumerate(advisory.alternatives, 1):
                 a = alt.attraction
                 print(f"    {i}. {a.name}")
-                print(f"       Category : {a.category}  |  Rating: {a.rating:.1f}"
-                      f"  |  Intensity: {a.intensity_level}")
+                print(f"       Category : {a.category}  |  Rating: {a.rating:.1f}")
                 print(f"       Why good : {alt.why_suitable}")
                 if a.historical_importance:
                     teaser = a.historical_importance.split(".")[0] + "."
@@ -1213,8 +1496,9 @@ class ReOptimizationSession:
                     S_orig      = 0.0,   # N/A — user-choice override
                     S_rep       = 0.0,
                 )
-                # Replan from the replacement stop's position
-                return self._do_replan(reasons=[decision.reason])
+                # Rule 6: single replacement — UserEditHandler already recomputed
+                # downstream timings; no full-day ACO rebuild needed (Rule 8).
+                return result.updated_plan
             return None
 
         # ── C: SKIP_CURRENT ────────────────────────────────────────────────
@@ -1246,8 +1530,11 @@ class ReOptimizationSession:
                       f" (S_pti={result.S_pti_lost:.2f} ≥"
                       f" {result.S_pti_lost:.2f} threshold).")
             # stop already marked_skipped by EventHandler._handle_skip_current;
-            # trigger replan from same position (no travel cost)
-            return self._do_replan(reasons=[decision.reason])
+            # Rule 6: single skip → fill the vacant slot via LocalRepair (Rule 5c)
+            return self._run_local_repair(
+                stop_name, "USER_SKIP", decision.reason,
+                allow_shift=False, allow_replace=True,
+            )
 
         print(f"  [UserEdit] Unknown user_edit_action: '{action}'")
         return None
@@ -1370,9 +1657,22 @@ class ReOptimizationSession:
                     S_rep       = advisory.alternatives[0].S_pti,
                 )
 
-        return self._do_replan(
-            reasons=[decision.reason],
-            deprioritize_outdoor=meta.get("deprioritize_outdoor", True),
+        # Rule 6: ≥3 blocked POIs → full PartialReplanner; else LocalRepair
+        blocked_count = len(advisory.blocked_stops)
+        if self._local_repair_engine.needs_global_replan(blocked_count):
+            return self._do_replan(
+                reasons=[decision.reason],
+                deprioritize_outdoor=meta.get("deprioritize_outdoor", True),
+            )
+        # Single / double blocked stop — find nearby indoor alternative (Rule 5c)
+        primary_stop = (
+            advisory.blocked_stops[0].attraction.name
+            if advisory.blocked_stops
+            else meta.get("next_stop_name", "")
+        )
+        return self._run_local_repair(
+            primary_stop, "WEATHER", decision.reason,
+            allow_shift=False, allow_replace=True,
         )
 
     def _print_weather_advisory(
@@ -1485,7 +1785,24 @@ class ReOptimizationSession:
                     S_rep       = advisory.alternatives[0].S_pti,
                 )
 
-        return self._do_replan(reasons=[decision.reason])
+        # Rule 6: ≥3 affected stops → full PartialReplanner; else LocalRepair
+        affected_count = len(advisory.deferred_stops) + len(advisory.replaced_stops)
+        if self._local_repair_engine.needs_global_replan(affected_count):
+            return self._do_replan(reasons=[decision.reason])
+        # 1-2 affected stops — shift if time allows, else replace nearby (Rule 5a/c)
+        primary_stop = (
+            advisory.deferred_stops[0].attraction.name
+            if advisory.deferred_stops
+            else (
+                advisory.replaced_stops[0].attraction.name
+                if advisory.replaced_stops
+                else meta.get("stop_name", "")
+            )
+        )
+        return self._run_local_repair(
+            primary_stop, "TRAFFIC", decision.reason,
+            allow_shift=True, allow_replace=True,
+        )
 
     def _print_traffic_advisory(
         self,
@@ -1629,6 +1946,116 @@ class ReOptimizationSession:
             reasons=[f"Fatigue disruption: {minutes_consumed}-min rest break inserted."]
         )
 
+    # ── Local repair (single-POI, Rules 1-8) ───────────────────────────────────
+
+    def _run_local_repair(
+        self,
+        disrupted_stop_name: str,
+        disruption_type: str,
+        reason: str,
+        allow_shift: bool = True,
+        allow_replace: bool = True,
+        crowd_level: float = 0.0,
+        crowd_threshold: float = 1.0,
+    ) -> DayPlan:
+        """
+        Attempt strict LocalRepair for a single-POI disruption (§1–§7).
+
+        §7 OUTPUT CONTRACT:
+          • Returns updated_plan with modified_elements ≤ 2.
+          • Confirms all §1 invariants satisfied.
+          • On invariant violation → logs ERROR_INVARIANT_VIOLATION and
+            escalates to full _do_replan() (user decision not required for
+            algorithmic invariants; session aborts and rebuilds).
+          • Falls through to _do_replan() if LocalRepair returns None.
+
+        Args:
+            disrupted_stop_name: The stop that triggered the disruption.
+            disruption_type:     "CROWD" | "WEATHER" | "TRAFFIC" | "USER_SKIP".
+            reason:              Human-readable reason string (for replan_history).
+            allow_shift:         False → skip §2 Steps 2 & 3 (shift/swap same stop).
+            allow_replace:       False → skip §2 Step 4 (nearby alternative).
+            crowd_level:         Current crowd fraction [0–1] (§5 forecast recheck).
+            crowd_threshold:     Crowd threshold for this stop (§5).
+        """
+        if not self.state.current_day_plan:
+            return self._do_replan(reasons=[reason])
+
+        print(f"\n  [LocalRepair] Triggered: {reason}")
+        print(
+            f"  [LocalRepair] Impacted: '{disrupted_stop_name}'  |  "
+            f"Time {self.state.current_time}  |  "
+            f"Remaining {self.state.remaining_minutes_today()} min"
+        )
+
+        # §2–§7: strict repair with invariant enforcement
+        repair_result: RepairResult | None = self._local_repair_engine.repair(
+            disrupted_stop_name  = disrupted_stop_name,
+            current_plan         = self.state.current_day_plan,
+            state                = self.state,
+            remaining_pool       = self._remaining,
+            constraints          = self.constraints,
+            disruption_type      = disruption_type,
+            allow_shift          = allow_shift,
+            allow_replace        = allow_replace,
+            crowd_level          = crowd_level,
+            crowd_threshold      = crowd_threshold,
+        )
+
+        # No strategy succeeded → escalate
+        if repair_result is None:
+            print(f"  [LocalRepair] No local fix found — escalating to full replan")
+            return self._do_replan(reasons=[reason])
+
+        # §7: invariant violation → request user decision via abort + full replan
+        if not repair_result.invariants_satisfied:
+            print(
+                f"  [LocalRepair] {repair_result.error_code}\n"
+                f"  [LocalRepair] Aborting repair — requesting full rebuild."
+            )
+            return self._do_replan(reasons=[reason])
+
+        new_plan = repair_result.updated_plan
+
+        # Commit plan
+        self.state.current_day_plan = new_plan
+        self.state.replan_pending   = False
+
+        self.replan_history.append({
+            "time":             self.state.current_time,
+            "reasons":          [reason],
+            "new_stops":        [rp.name for rp in new_plan.route_points],
+            "repair_type":      "LOCAL",
+            "strategy_used":    repair_result.strategy_used,
+            "modified_elements": repair_result.modified_elements,
+        })
+
+        # ── §7 OUTPUT: print strategy, modified elements, invariant confirmation
+        sep = "─" * 60
+        print(f"\n  {sep}")
+        print(f"  RE-OPTIMIZED DAY {self.state.current_day} — timetable after disruption")
+        print(f"  Strategy: {repair_result.strategy_used}")
+        if repair_result.modified_elements:
+            print(f"  Modified elements ({len(repair_result.modified_elements)}): "
+                  f"{', '.join(repair_result.modified_elements)}")
+        print(f"  Invariants: ALL SATISFIED ✓")
+        print(f"  {sep}")
+        if new_plan.route_points:
+            for rp in new_plan.route_points:
+                arr = rp.arrival_time.strftime("%H:%M")   if rp.arrival_time   else "--:--"
+                dep = rp.departure_time.strftime("%H:%M") if rp.departure_time else "--:--"
+                tag = " [meal]" if getattr(rp, "activity_type", "") in {"restaurant", "meal"} else ""
+                cat = getattr(rp, "category", "")
+                cat_str = f"  ({cat})" if cat else ""
+                print(f"    [{rp.sequence:>2}] {rp.name}{tag}{cat_str}")
+                print(f"          {arr} – {dep}   {rp.visit_duration_minutes} min")
+        else:
+            print("    (no stops — day is complete)")
+        print(f"  {sep}\n")
+
+        self._handle_empty_day(repair_result)
+        return new_plan
+
     # ── Internal replan dispatcher ────────────────────────────────────────────
 
     def _do_replan(
@@ -1664,7 +2091,26 @@ class ReOptimizationSession:
         })
 
         stop_names = [rp.name for rp in new_plan.route_points]
-        print(f"  [Replan] New plan ({len(stop_names)} stops): {stop_names}\n")
+        print(f"  [Replan] New plan ({len(stop_names)} stops): {stop_names}")
+
+        # ── Formatted timetable for the replanned day ─────────────────────────
+        sep = "─" * 60
+        print(f"\n  {'─' * 60}")
+        print(f"  RE-OPTIMIZED DAY {self.state.current_day} — timetable after disruption")
+        print(f"  {sep}")
+        if new_plan.route_points:
+            for rp in new_plan.route_points:
+                arr = rp.arrival_time.strftime("%H:%M")   if rp.arrival_time   else "--:--"
+                dep = rp.departure_time.strftime("%H:%M") if rp.departure_time else "--:--"
+                tag = " [meal]" if getattr(rp, "activity_type", "") == "restaurant" else ""
+                cat = getattr(rp, "category", "")
+                cat_str = f"  ({cat})" if cat else ""
+                print(f"    [{rp.sequence:>2}] {rp.name}{tag}{cat_str}")
+                print(f"          {arr} – {dep}   {rp.visit_duration_minutes} min")
+        else:
+            print("    (no stops — day is complete)")
+        print(f"  {sep}\n")
+
         return new_plan
 
     # ── Helpers ───────────────────────────────────────────────────────────────
@@ -1706,3 +2152,200 @@ class ReOptimizationSession:
             "pending_decision":     pending_info,
             "disruption_memory":    self._disruption_memory.summarize(),
         }
+
+    # ── Agent Controller integration ──────────────────────────────────────────
+
+    def agent_evaluate(
+        self,
+        *,
+        crowd_level: float | None = None,
+        weather_condition: str | None = None,
+        traffic_level: float | None = None,
+        traffic_delay_minutes: int = 0,
+    ) -> ExecutionResult:
+        """
+        Run the full Agent → Execution pipeline:
+
+          1. AgentController.observe()  — build read-only snapshot
+          2. AgentController.evaluate() — deterministic rule engine → AgentAction
+          3. ExecutionLayer.execute()   — apply action to mutable state
+          4. Log decision to ShortTermMemory
+
+        The agent NEVER touches itinerary state directly.
+        Only ExecutionLayer performs mutations.
+
+        Returns:
+            ExecutionResult with the action taken, any new plan, alternatives, etc.
+        """
+        # 1. Observe
+        obs = self._agent_controller.observe(
+            state=self.state,
+            constraints=self.constraints,
+            remaining_attractions=self._remaining,
+            budget=self.budget,
+            crowd_level=crowd_level,
+            weather_condition=weather_condition,
+            traffic_level=traffic_level,
+            traffic_delay_minutes=traffic_delay_minutes,
+        )
+
+        # 2. Decide
+        action = self._agent_controller.evaluate(obs)
+
+        print(f"  [Agent] {action}")
+
+        # 3. Execute (only the execution layer may mutate state)
+        result = self._execution_layer.execute(
+            action=action,
+            state=self.state,
+            remaining_attractions=self._remaining,
+            constraints=self.constraints,
+            budget=self.budget,
+            restaurant_pool=self._restaurant_pool,
+        )
+
+        # 4. Update remaining pool + plan if execution produced a new plan
+        if result.new_plan is not None:
+            self.state.current_day_plan = result.new_plan
+            planned_names = {rp.name for rp in result.new_plan.route_points}
+            self.replan_history.append({
+                "time": self.state.current_time,
+                "reasons": [action.reasoning],
+                "new_stops": list(planned_names),
+            })
+
+        # 5. If alternatives were generated, build a PendingDecision
+        if result.alternatives and action.action_type in (
+            ActionType.REQUEST_USER_DECISION,
+            ActionType.REPLACE_POI,
+        ):
+            alt_names = [a.name for a in result.alternatives]
+            impacted = [action.target_poi] if action.target_poi else []
+            self.pending_decision = PendingDecision(
+                disruption_type="AGENT",
+                impacted_pois=impacted,
+                reason=action.reasoning,
+                missed_value=obs.next_stop_spti_proxy,
+                proposed_actions=[
+                    ProposedAction("REPLACE", action.target_poi or "", {}),
+                    ProposedAction("KEEP_AS_IS", action.target_poi or "", {}),
+                ],
+                suggested_alternatives=alt_names,
+                severity=max(
+                    obs.weather_severity,
+                    obs.crowd_level or 0.0,
+                    obs.traffic_level or 0.0,
+                ),
+            )
+            self.pending_decision._rich_alternatives = result.alternatives  # type: ignore[attr-defined]
+            self._print_pending_decision(self.pending_decision)
+
+        # 6. If a constraint was relaxed, log it
+        if result.relaxed_constraint:
+            rc = result.relaxed_constraint
+            print(f"  [Agent] Constraint relaxed: {rc['constraint']} "
+                  f"{rc.get('old')} → {rc.get('new')}")
+
+        return result
+
+    # ── Multi-Agent Orchestrator integration ───────────────────────────────────
+
+    def orchestrate(
+        self,
+        *,
+        event_type: str = "",
+        user_input: str = "",
+        crowd_level: float | None = None,
+        weather_condition: str | None = None,
+        traffic_level: float | None = None,
+        traffic_delay_minutes: int = 0,
+        extra_params: dict | None = None,
+    ) -> DispatchResult:
+        """
+        Run the full multi-agent pipeline:
+
+          1. AgentController.observe()       → AgentObservation
+          2. OrchestratorAgent.route()       → which specialist
+          3. Specialist.evaluate()           → AgentAction
+          4. ExecutionLayer.execute()        → ExecutionResult
+          5. Log + update state
+
+        Returns:
+            DispatchResult with the full trace (routing, specialist, action, execution).
+        """
+        # 1. Build observation (reuse the same observe() from AgentController)
+        obs = self._agent_controller.observe(
+            state=self.state,
+            constraints=self.constraints,
+            remaining_attractions=self._remaining,
+            budget=self.budget,
+            crowd_level=crowd_level,
+            weather_condition=weather_condition,
+            traffic_level=traffic_level,
+            traffic_delay_minutes=traffic_delay_minutes,
+        )
+
+        # 2. Build context for the multi-agent pipeline
+        context = AgentContext(
+            observation=obs,
+            event_type=event_type,
+            user_input=user_input,
+            parameters=extra_params or {},
+        )
+
+        # 3. Dispatch through orchestrator → specialist → execution layer
+        result = self._dispatcher.dispatch(
+            context=context,
+            state=self.state,
+            remaining_attractions=self._remaining,
+            constraints=self.constraints,
+            budget=self.budget,
+            restaurant_pool=self._restaurant_pool,
+        )
+
+        exec_result = result.execution_result
+
+        # 4. Update plan if execution produced a new plan
+        if exec_result.new_plan is not None:
+            self.state.current_day_plan = exec_result.new_plan
+            planned_names = {rp.name for rp in exec_result.new_plan.route_points}
+            self.replan_history.append({
+                "time": self.state.current_time,
+                "reasons": [result.action.reasoning],
+                "new_stops": list(planned_names),
+                "specialist": result.specialist_name,
+            })
+
+        # 5. Build PendingDecision if alternatives were generated
+        if exec_result.alternatives and result.action.action_type in (
+            ActionType.REQUEST_USER_DECISION,
+            ActionType.REPLACE_POI,
+        ):
+            alt_names = [a.name for a in exec_result.alternatives]
+            impacted = [result.action.target_poi] if result.action.target_poi else []
+            self.pending_decision = PendingDecision(
+                disruption_type=f"AGENT:{result.specialist_name}",
+                impacted_pois=impacted,
+                reason=result.action.reasoning,
+                missed_value=obs.next_stop_spti_proxy,
+                proposed_actions=[
+                    ProposedAction("REPLACE", result.action.target_poi or "", {}),
+                    ProposedAction("KEEP_AS_IS", result.action.target_poi or "", {}),
+                ],
+                suggested_alternatives=alt_names,
+                severity=max(
+                    obs.weather_severity,
+                    obs.crowd_level or 0.0,
+                    obs.traffic_level or 0.0,
+                ),
+            )
+            self.pending_decision._rich_alternatives = exec_result.alternatives  # type: ignore[attr-defined]
+            self._print_pending_decision(self.pending_decision)
+
+        # 6. Log relaxed constraint
+        if exec_result.relaxed_constraint:
+            rc = exec_result.relaxed_constraint
+            print(f"  [Orchestrator] Constraint relaxed: {rc['constraint']} "
+                  f"{rc.get('old')} → {rc.get('new')}")
+
+        return result

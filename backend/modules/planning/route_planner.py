@@ -25,22 +25,111 @@ from __future__ import annotations
 from datetime import date, time, datetime, timedelta
 from typing import Optional
 import math
+import re
 import uuid
 
 from schemas.constraints import ConstraintBundle
 from schemas.itinerary import BudgetAllocation, DayPlan, Itinerary, RoutePoint
 from schemas.ftrm import FTRMGraph, FTRMNode, FTRMEdge, FTRMParameters
-from modules.tool_usage.attraction_tool import AttractionRecord
+from modules.tool_usage.attraction_tool import AttractionRecord, _CITY_CENTERS, _CITY_NAME_ALIASES
 from modules.tool_usage.distance_tool import DistanceTool
 from modules.tool_usage.time_tool import TimeTool
 from modules.optimization.satisfaction import evaluate_satisfaction
 from modules.optimization.aco_optimizer import ACOOptimizer, Tour
+from modules.observability.logger import StructuredLogger
 import config
+import time as _time_mod
+
+_perf_logger = StructuredLogger()
 
 
 # Default day boundaries (CONFIRMED: minutes unit)
 DEFAULT_DAY_START: time = time(9, 0)    # 09:00
 DEFAULT_DAY_END:   time = time(20, 0)   # 20:00 → Tmax = 660 min (but config.ACO_TMAX_MINUTES used)
+
+# ── Deterministic scheduling constants (all time values in minutes) ──────────
+_TRANSITION_BUFFER_MIN:    int   = 12     # Rule 1: 10–15 min transition buffer between POIs
+_MAX_CONTINUOUS_SIGHT_MIN: int   = 180    # Rule 5: max unbroken sightseeing (3 h)
+_MAX_SAME_DAY_TRAVEL_MIN:  float = 60.0   # Rule 7: travel > 60 min → reassign to next day
+_MAX_IDLE_GAP_MIN:         int   = 90     # Rule 6: max idle gap before insertion
+_MAX_CLUSTER_RADIUS_KM:    float = 9.0    # Rule 2: max per-day cluster radius (8–10 km)
+_DAY_END_HARD:             time  = time(20, 30)   # Rule 6: hard day cutoff
+_KMEANS_ITERATIONS:        int   = 15             # geographic K-means convergence limit
+_DEDUP_COORD_DIST_KM:      float = 0.30   # Rule 4: same-location threshold (300 m)
+_DEDUP_WORD_OVERLAP_RATIO: float = 0.70   # Rule 4: name-word overlap considered duplicate
+
+# ── Scheduling guard constants ───────────────────────────────────────────────
+_ANCHOR_MAX_DIST_KM: float = 50.0     # Rule 1: hotel anchor must be within 50 km of city center
+_MIN_STOPS_PER_DAY:  int   = 2        # Rule 4: minimum stops per day before relaxation kicks in
+# Relaxed secondary constraint values (applied only when < _MIN_STOPS_PER_DAY scheduled)
+_RELAX_BUFFER_MIN:   int   = 0        # Rule 4a: drop transition buffer
+_RELAX_TRAVEL_MIN:   float = 120.0    # Rule 4c: extended same-day travel threshold (was 60)
+
+
+# ── Module-level time helpers ─────────────────────────────────────────────────
+
+def _t2m(t: time) -> int:
+    """Convert a time object to integer minutes-from-midnight."""
+    return t.hour * 60 + t.minute
+
+
+def _m2t(mins: int) -> time:
+    """Convert minutes-from-midnight to a time object (clamped to [0, 1439])."""
+    mins = max(0, min(int(mins), 23 * 60 + 59))
+    return time(mins // 60, mins % 60)
+
+
+def _haversine_inline(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in kilometres (used for clustering and dedup)."""
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lam = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+# ── Anchor / city-center helpers ──────────────────────────────────────────────
+
+def _get_city_center(city: str) -> tuple[float, float] | None:
+    """
+    Return (lat, lon) for *city* using the _CITY_CENTERS table (zero API calls).
+    Aliases (state names, misspellings) are resolved first via _CITY_NAME_ALIASES.
+    Returns None if the city is not in the table.
+    """
+    norm = city.lower().strip()
+    key = _CITY_NAME_ALIASES.get(norm, norm)
+    return _CITY_CENTERS.get(key)
+
+
+def _validate_hotel_anchor(
+    hotel_lat: float,
+    hotel_lon: float,
+    destination_city: str,
+) -> None:
+    """
+    Rule 1 — Anchor Validation.
+
+    Asserts hotel coordinates are within _ANCHOR_MAX_DIST_KM (50 km) of the
+    destination city center.  Raises ERROR_INVALID_HOTEL_ANCHOR on failure.
+
+    Skips the distance check when:
+      - hotel_lat == hotel_lon == 0.0  (sentinel for "not set")
+      - city center not in _CITY_CENTERS (cannot compute distance)
+    This prevents false positives for stubs that pass (0, 0) as placeholder coords.
+    """
+    if hotel_lat == 0.0 and hotel_lon == 0.0:
+        return  # sentinel — coordinates not yet populated; skip check
+    center = _get_city_center(destination_city)
+    if center is None:
+        return  # city center unknown — cannot validate, allow through
+    dist_km = _haversine_inline(hotel_lat, hotel_lon, center[0], center[1])
+    if dist_km > _ANCHOR_MAX_DIST_KM:
+        raise RuntimeError(
+            f"ERROR_INVALID_HOTEL_ANCHOR: hotel ({hotel_lat:.5f}, {hotel_lon:.5f}) "
+            f"is {dist_km:.1f} km from {destination_city!r} city center "
+            f"({center[0]:.5f}, {center[1]:.5f}); limit = {_ANCHOR_MAX_DIST_KM} km."
+        )
 
 
 class RoutePlanner:
@@ -101,6 +190,7 @@ class RoutePlanner:
         Returns:
             Populated Itinerary object (Eq 5 objective maximised per day by ACO).
         """
+        _t0 = _time_mod.perf_counter()
         itinerary = Itinerary(
             trip_id=str(uuid.uuid4()),
             destination_city=constraints.hard.destination_city,
@@ -108,36 +198,41 @@ class RoutePlanner:
             generated_at=datetime.utcnow().isoformat() + "Z",
         )
 
-        # Derive trip_month from departure_date for seasonal HC check
-        trip_month = start_date.month if start_date else 0
-        # group_size: prefer explicit HC field; fall back to adults+children sum
-        group_size = constraints.hard.group_size or constraints.hard.total_travelers or 1
-        traveler_ages = constraints.hard.traveler_ages
+        # ── Rule 1: Anchor Validation ─────────────────────────────────────────
+        # Must run BEFORE any scheduling so a bad hotel anchor aborts early.
+        destination_city = constraints.hard.destination_city
+        _validate_hotel_anchor(hotel_lat, hotel_lon, destination_city)
+
+        # Removed: trip_month, group_size, traveler_ages — no API source for
+        # seasonal/age/capacity HC checks (see 07-simplified-model.md)
 
         # ── Pre-distribute attractions evenly across days ─────────────────────
         # Guarantees every day gets at least 1 stop (no empty days).
         # Stops are pre-divided into per-day quotas; any ACO-unvisited stops from
         # a day's quota are carried forward into the next day's pool (rollover).
-        num_days     = max((end_date - start_date).days + 1, 1)
-        total_stops  = len(attraction_set)
-        quota_per_day = max(math.ceil(total_stops / num_days), 1)
+        # ── Rule 4: Semantic deduplication ───────────────────────────────────
+        deduped = self._deduplicate_attractions(attraction_set)
+        if len(deduped) < len(attraction_set):
+            print(f"  [scheduler] Deduplicated: {len(attraction_set)} → {len(deduped)} attractions")
 
-        # Build per-day buckets by slicing the ranked attraction list
-        day_buckets: list[list[AttractionRecord]] = []
-        for d in range(num_days):
-            start_idx = d * quota_per_day
-            end_idx   = min(start_idx + quota_per_day, total_stops)
-            day_buckets.append(list(attraction_set[start_idx:end_idx]))
+        num_days = max((end_date - start_date).days + 1, 1)
 
-        # Carry any leftover stops (if total_stops % num_days != 0) into last bucket
-        # (already handled by the min() above, but ensure last day is non-empty)
-        if total_stops > 0 and not day_buckets[-1]:
-            day_buckets[-1] = list(attraction_set[-1:])
+        # ── Rules 2 + 7: Geographic clustering ───────────────────────────────
+        # Group POIs by proximity (max _MAX_CLUSTER_RADIUS_KM per day-group).
+        # This replaces the naïve sequential slice that caused cross-city zig-zags.
+        day_buckets: list[list[AttractionRecord]] = self._cluster_by_proximity(
+            deduped, num_days, hotel_lat, hotel_lon
+        )
+
+        # Ensure at least one bucket per day (pad if clustering returned fewer)
+        while len(day_buckets) < num_days:
+            day_buckets.append([])
 
         visited_globally: set[str] = set()   # Eq 8: visit-once across all days
         current_date = start_date
         day_number   = 1
         rollover: list[AttractionRecord] = []   # unvisited from previous day quota
+        total_scheduled: int = 0               # Rule 3/6: track stops scheduled globally
 
         for day_idx, bucket in enumerate(day_buckets):
             is_boundary_day = (current_date == start_date or current_date == end_date)
@@ -154,14 +249,12 @@ class RoutePlanner:
                 start_lat=hotel_lat,
                 start_lon=hotel_lon,
                 constraints=constraints,
-                trip_month=trip_month,
-                group_size=group_size,
-                traveler_ages=traveler_ages,
                 is_arrival_or_departure_day=is_boundary_day,
             )
 
             visited_today  = {rp.name for rp in day_plan.route_points}
             visited_globally |= visited_today
+            total_scheduled  += len(day_plan.route_points)
 
             # Stops in today's pool that ACO could not fit → roll to tomorrow
             rollover = [a for a in pool if a.name not in visited_globally]
@@ -171,6 +264,23 @@ class RoutePlanner:
             current_date += timedelta(days=1)
             day_number   += 1
 
+        # ── Rule 6: Hard Failure Guard ───────────────────────────────────────
+        # Hotel anchor was validated above; distance matrix is validated inside
+        # _build_graph() for each day.  If we reach here with attractions in the
+        # input but zero scheduled stops, the scheduler has a logic error.
+        attractions_count = len(deduped)
+        if attractions_count > 0 and total_scheduled == 0:
+            raise RuntimeError(
+                f"ERROR_SCHEDULER_LOGIC: {attractions_count} attraction(s) supplied "
+                f"for {destination_city!r} but zero stops were scheduled across "
+                f"{num_days} day(s).  Constraints may be too restrictive or all "
+                f"S_pti scores are zero.  Check debug trace printed above for details."
+            )
+
+        _perf_logger.log("default", "PERFORMANCE", {
+            "component": "RoutePlanner.plan",
+            "duration_ms": round((_time_mod.perf_counter() - _t0) * 1000, 2),
+        })
         return itinerary
 
     # ── Single-day planner ────────────────────────────────────────────────────
@@ -183,13 +293,22 @@ class RoutePlanner:
         start_lat: float,
         start_lon: float,
         constraints: ConstraintBundle | None = None,
-        trip_month: int = 0,
-        group_size: int = 1,
-        traveler_ages: list[int] | None = None,
         is_arrival_or_departure_day: bool = False,
     ) -> DayPlan:
         """
         Run ACO for one day. Returns a DayPlan with timed RoutePoints.
+
+        Rule 4 — Minimum Scheduling Rule:
+          If fewer than _MIN_STOPS_PER_DAY (2) are scheduled on the first pass,
+          the method retries by relaxing *secondary* constraints in order:
+            a) Buffer time    : _TRANSITION_BUFFER_MIN → 0
+            b) Travel radius  : _MAX_SAME_DAY_TRAVEL_MIN → _RELAX_TRAVEL_MIN
+          Hard constraints (HC gate, opening hours, city) are NEVER relaxed.
+          The pass that yields the most stops is kept.
+
+        Rule 5 — Debug Trace:
+          Before returning a completely empty day (0 stops) when pool is
+          non-empty, prints per-attraction rejection diagnostics.
         """
         day = DayPlan(day_number=day_number, date=plan_date)
 
@@ -202,14 +321,9 @@ class RoutePlanner:
         )
 
         # ── Compute S_pti per node (Eq 1→4) ──────────────────────────────────
-        # Pass full constraints so HC (group, seasonal, etc.) and
-        # SC (interests, crowd, energy) are evaluated with user profile.
         S_pti = self._compute_satisfaction(
             graph,
             constraints=constraints,
-            trip_month=trip_month,
-            group_size=group_size,
-            traveler_ages=traveler_ages or [],
             is_arrival_or_departure_day=is_arrival_or_departure_day,
         )
 
@@ -218,19 +332,98 @@ class RoutePlanner:
             graph=graph,
             S_pti=S_pti,
             params=self.ftrm_params,
-            start_node=0,   # node 0 = hotel/start
+            start_node=0,
             seed=None,
         )
         best_tour: Tour = aco.run()
 
-        # ── Convert Tour → RoutePoints with timed schedule ────────────────────
+        # ── Pass 1: normal constraints ────────────────────────────────────────
         day = self._tour_to_day_plan(
             tour=best_tour,
             day_number=day_number,
             plan_date=plan_date,
             graph=graph,
             node_map=node_map,
+            buffer_min=_TRANSITION_BUFFER_MIN,
+            max_travel_min=_MAX_SAME_DAY_TRAVEL_MIN,
         )
+
+        # ── Rule 4: constraint relaxation retries ─────────────────────────────
+        if len(day.route_points) < _MIN_STOPS_PER_DAY:
+            # Pass 2 — relax buffer time (Rule 4a)
+            day2 = self._tour_to_day_plan(
+                tour=best_tour,
+                day_number=day_number,
+                plan_date=plan_date,
+                graph=graph,
+                node_map=node_map,
+                buffer_min=_RELAX_BUFFER_MIN,
+                max_travel_min=_MAX_SAME_DAY_TRAVEL_MIN,
+            )
+            if len(day2.route_points) > len(day.route_points):
+                day = day2
+                if len(day.route_points) >= _MIN_STOPS_PER_DAY:
+                    print(
+                        f"  [scheduler] Day {day_number}: relaxed buffer → "
+                        f"{len(day.route_points)} stop(s) scheduled."
+                    )
+
+        if len(day.route_points) < _MIN_STOPS_PER_DAY:
+            # Pass 3 — relax buffer + travel threshold (Rule 4b/c)
+            day3 = self._tour_to_day_plan(
+                tour=best_tour,
+                day_number=day_number,
+                plan_date=plan_date,
+                graph=graph,
+                node_map=node_map,
+                buffer_min=_RELAX_BUFFER_MIN,
+                max_travel_min=_RELAX_TRAVEL_MIN,
+            )
+            if len(day3.route_points) > len(day.route_points):
+                day = day3
+                if len(day.route_points) >= _MIN_STOPS_PER_DAY:
+                    print(
+                        f"  [scheduler] Day {day_number}: relaxed buffer+travel → "
+                        f"{len(day.route_points)} stop(s) scheduled."
+                    )
+
+        # ── Rule 5: Debug trace before returning empty day ────────────────────
+        if len(day.route_points) == 0:
+            print(
+                f"\n  [SCHEDULER_DEBUG] Day {day_number} — 0 stops scheduled "
+                f"from pool of {len(available_attractions)} attraction(s)."
+            )
+            print(f"    HotelAnchorLatLon    : ({start_lat:.5f}, {start_lon:.5f})")
+            Tmax = self.ftrm_params.Tmax
+            for idx, attr in enumerate(available_attractions[:5]):
+                Dij = graph.get_Dij(0, idx + 1)
+                STi = float(attr.visit_duration_minutes)
+                node_id = idx + 1
+                s_val = S_pti.get(node_id, 0.0)
+
+                # Diagnose primary rejection reason
+                if s_val <= 0.0:
+                    reason = "S_pti=0 (HC gate failed — check rating/opening hours)"
+                elif Dij == float("inf"):
+                    reason = "Dij=inf (no route from hotel to this attraction)"
+                elif Dij > _RELAX_TRAVEL_MIN:
+                    reason = f"TravelTime={Dij:.0f} min > relaxed limit {_RELAX_TRAVEL_MIN:.0f} min"
+                elif Dij + STi > Tmax:
+                    reason = f"Dij({Dij:.0f})+STi({STi:.0f})={Dij+STi:.0f} > Tmax({Tmax:.0f})"
+                else:
+                    reason = f"DayEndBlock: departure would exceed {_DAY_END_HARD}"
+
+                print(
+                    f"    Attraction[{idx+1}] {attr.name!r}\n"
+                    f"      AttrLatLon      : ({attr.location_lat:.5f}, {attr.location_lon:.5f})\n"
+                    f"      TravelTimeMin   : {Dij:.1f}\n"
+                    f"      TmaxRemaining   : {Tmax:.0f}\n"
+                    f"      STi             : {STi:.0f} min\n"
+                    f"      S_pti           : {s_val:.4f}\n"
+                    f"      RejectionReason : {reason}"
+                )
+            print()
+
         return day
 
     # ── Graph construction ────────────────────────────────────────────────────
@@ -244,7 +437,7 @@ class RoutePlanner:
         """
         Build FTRMGraph from attraction list.
         Node 0 = virtual start (hotel). Nodes 1..N = attractions.
-        Dij computed via DistanceTool (minutes via TimeTool).
+        Dij computed via OSRM Table API (single call for all pairs); haversine fallback.
 
         Returns:
             (FTRMGraph, node_map) where node_map[node_id] = AttractionRecord | None.
@@ -269,14 +462,33 @@ class RoutePlanner:
             nodes.append(n)
             node_map[idx] = attr
 
-        # Create edges (complete graph) — Dij in minutes
+        # Create edges (complete graph) — Dij in minutes.
+        # OSRM Table API: one HTTP request returns the full n×n duration matrix,
+        # replacing O(n²) individual route calls.
+        node_coords = [(n.lat, n.lon) for n in nodes]
+        dij_matrix  = self.distance_tool.travel_time_matrix(node_coords)
+
+        # ── Rule 2: Distance Matrix Validation ───────────────────────────────
+        # If every non-diagonal cell is inf the matrix is unusable.
+        if len(nodes) > 1:
+            finite_count = sum(
+                1 for a in nodes for b in nodes
+                if a.node_id != b.node_id
+                and dij_matrix[a.node_id][b.node_id] != float("inf")
+            )
+            if finite_count == 0:
+                raise RuntimeError(
+                    f"ERROR_MISSING_DISTANCE_DATA: travel-time matrix contains "
+                    f"only inf values for {len(nodes)-1} attraction(s).  "
+                    f"OSRM may be unreachable and haversine fallback did not fire."
+                )
+
         edges: list[FTRMEdge] = []
         for a in nodes:
             for b in nodes:
                 if a.node_id == b.node_id:
                     continue
-                dist_km = self.distance_tool.calculate(a.lat, a.lon, b.lat, b.lon)
-                Dij_min = self.time_tool.estimate_travel_time(dist_km)
+                Dij_min = dij_matrix[a.node_id][b.node_id]
                 edges.append(FTRMEdge(i=a.node_id, j=b.node_id, Dij=Dij_min))
 
         graph = FTRMGraph(nodes=nodes, edges=edges)
@@ -289,18 +501,14 @@ class RoutePlanner:
         self,
         graph: FTRMGraph,
         constraints: ConstraintBundle | None = None,
-        trip_month: int = 0,
-        group_size: int = 1,
-        traveler_ages: list[int] | None = None,
         is_arrival_or_departure_day: bool = False,
     ) -> dict[int, float]:
         """
         Compute S_pti for each node using full Eq 1→4 chain via AttractionScorer.
 
         The scorer evaluates:
-          - HC: opening hours, Tmax, accessibility, age, group size, seasonal, min-duration
-          - SC: optimal window, remaining-time, interest match,
-                time-of-day preference, crowd/energy management
+          - HC: opening hours, Tmax, accessibility, min-duration (simplified 4-HC set)
+          - SC: rating quality, interest match, outdoor preference (3-SC set)
 
         Start/end nodes carry zero satisfaction.
         """
@@ -312,9 +520,6 @@ class RoutePlanner:
             sc_method=self.ftrm_params.sc_aggregation_method,
             Tmax_minutes=self.ftrm_params.Tmax,
             constraints=constraints,
-            trip_month=trip_month,
-            group_size=group_size,
-            traveler_ages=traveler_ages or [],
         )
 
         S_pti: dict[int, float] = {}
@@ -335,6 +540,121 @@ class RoutePlanner:
             S_pti[node.node_id] = result["S"]
         return S_pti
 
+    # ── Deduplication ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _deduplicate_attractions(
+        attractions: list[AttractionRecord],
+    ) -> list[AttractionRecord]:
+        """
+        Rule 4: Remove semantic duplicates from the attraction pool.
+
+        A candidate is a duplicate of an already-kept record if ANY of:
+          (a) coordinates within _DEDUP_COORD_DIST_KM (300 m) of each other, OR
+          (b) one normalised name is a substring of the other, OR
+          (c) word-level overlap ratio ≥ _DEDUP_WORD_OVERLAP_RATIO (70 %).
+
+        The first occurrence (highest ranked) is kept; all others are dropped.
+        """
+        def _norm(s: str) -> str:
+            return re.sub(r"[^a-z0-9 ]", " ", s.lower()).strip()
+
+        kept: list[AttractionRecord] = []
+        for cand in attractions:
+            cand_norm  = _norm(cand.name)
+            cand_words = set(cand_norm.split())
+            is_dup = False
+            for k in kept:
+                # (a) Coordinate proximity
+                if _haversine_inline(
+                    cand.location_lat, cand.location_lon,
+                    k.location_lat,   k.location_lon,
+                ) < _DEDUP_COORD_DIST_KM:
+                    is_dup = True
+                    break
+                # (b) Name containment
+                k_norm = _norm(k.name)
+                if cand_norm in k_norm or k_norm in cand_norm:
+                    is_dup = True
+                    break
+                # (c) Word-overlap ratio
+                k_words = set(k_norm.split())
+                if cand_words and k_words:
+                    overlap = len(cand_words & k_words) / min(len(cand_words), len(k_words))
+                    if overlap >= _DEDUP_WORD_OVERLAP_RATIO:
+                        is_dup = True
+                        break
+            if not is_dup:
+                kept.append(cand)
+        return kept
+
+    # ── Geographic clustering ──────────────────────────────────────────────────
+
+    def _cluster_by_proximity(
+        self,
+        attractions: list[AttractionRecord],
+        num_days: int,
+        hotel_lat: float,
+        hotel_lon: float,
+    ) -> list[list[AttractionRecord]]:
+        """
+        Rules 2 + 7: Group attractions into num_days geographically coherent clusters
+        so no single day's route zig-zags across the city.
+
+        Algorithm: iterative K-means on (lat, lon) with K = num_days.
+        Attractions assigned to the centroid nearest their coordinates.
+        """
+        n = len(attractions)
+        if n == 0:
+            return [[] for _ in range(num_days)]
+        if num_days <= 1 or n <= num_days:
+            clusters = [[a] for a in attractions]
+            while len(clusters) < num_days:
+                clusters.append([])
+            return clusters[:num_days]
+
+        K = min(num_days, n)
+        # Initialise centroids: evenly-spaced by latitude sort
+        sorted_a = sorted(attractions, key=lambda a: (a.location_lat, a.location_lon))
+        step = n / K
+        centroids: list[tuple[float, float]] = [
+            (sorted_a[int(i * step)].location_lat, sorted_a[int(i * step)].location_lon)
+            for i in range(K)
+        ]
+
+        clusters: list[list[AttractionRecord]] = [[] for _ in range(K)]
+        for _ in range(_KMEANS_ITERATIONS):
+            new_clusters: list[list[AttractionRecord]] = [[] for _ in range(K)]
+            for attr in attractions:
+                dists = [
+                    _haversine_inline(attr.location_lat, attr.location_lon, clat, clon)
+                    for clat, clon in centroids
+                ]
+                new_clusters[dists.index(min(dists))].append(attr)
+
+            # Update centroids
+            new_centroids: list[tuple[float, float]] = []
+            for i, clust in enumerate(new_clusters):
+                if clust:
+                    new_centroids.append((
+                        sum(a.location_lat for a in clust) / len(clust),
+                        sum(a.location_lon for a in clust) / len(clust),
+                    ))
+                else:
+                    new_centroids.append(centroids[i])
+
+            if new_centroids == centroids:
+                clusters = new_clusters
+                break
+            centroids = new_centroids
+            clusters  = new_clusters
+
+        # Pad to num_days
+        result = list(clusters)
+        while len(result) < num_days:
+            result.append([])
+        return result[:num_days]
+
     # ── Tour → DayPlan conversion ─────────────────────────────────────────────
 
     def _tour_to_day_plan(
@@ -344,46 +664,82 @@ class RoutePlanner:
         plan_date: date,
         graph: FTRMGraph,
         node_map: dict[int, AttractionRecord | None],
+        buffer_min: int = _TRANSITION_BUFFER_MIN,
+        max_travel_min: float = _MAX_SAME_DAY_TRAVEL_MIN,
     ) -> DayPlan:
         """
-        Assign arrival/departure times to each node in the ACO tour path.
-        Skips node 0 (start/hotel node) and end-placeholder nodes.
+        Convert an ACO-ordered tour into a DayPlan applying all deterministic
+        time-structuring rules.
+
+        Args:
+            buffer_min      : Transition buffer between stops (Rule 4a relaxation).
+            max_travel_min  : Max intra-day travel before skipping a stop
+                              (Rule 4c relaxation).
+
+        Rule 1  — Time continuity:
+                  arrival(i) = departure(i-1) + travel_time + buffer_min
+        Rule 5  — Fatigue balancing:
+                  Track continuous sightseeing minutes; reset at 3 h.
+        Rule 6  — Day completion:
+                  Stop scheduling any attraction whose departure > _DAY_END_HARD.
+        Rule 7  — Travel realism:
+                  Skip any attraction where Dij > max_travel_min (from previous stop).
         """
         day = DayPlan(day_number=day_number, date=plan_date)
-        t_cur: time = DEFAULT_DAY_START
-        prev_node_id: int = 0   # start from hotel
-        sequence = 0
+        t_cur_min: int = _t2m(DEFAULT_DAY_START)   # minutes from midnight (09:00)
+        prev_node_id: int = 0                       # hotel / start node
+        sequence: int = 0
+        continuous_min: int = 0                     # Rule 5: unbroken sightseeing acc.
+        day_end_min  = _t2m(_DAY_END_HARD)          # 20:30
 
         for node_id in tour.path:
-            if node_id == 0:   # skip start node
-                continue
+            if node_id == 0:
+                continue                   # skip virtual start node
 
             node_obj = graph.get_node(node_id)
             attr_rec = node_map.get(node_id)
             if node_obj is None or attr_rec is None:
                 continue
 
-            # Travel time from previous node [minutes]
             Dij = graph.get_Dij(prev_node_id, node_id)
-            arrival = self.time_tool.add_minutes(t_cur, Dij)
-            departure = self.time_tool.add_minutes(arrival, node_obj.STi)
+
+            # Rule 7: if travel from *previous POI* (not hotel) would exceed
+            # max_travel_min, skip — belongs to a different geographic cluster.
+            if prev_node_id != 0 and Dij > max_travel_min:
+                continue
+
+            # Rule 1: strict time continuity — add travel time AND buffer
+            arrival_min   = t_cur_min + int(Dij) + buffer_min
+            duration_min  = max(int(node_obj.STi), 1)
+            departure_min = arrival_min + duration_min
+
+            # Rule 6: stop scheduling once departure would exceed the hard day-end
+            if departure_min > day_end_min:
+                break
 
             rp = RoutePoint(
                 sequence=sequence,
                 name=attr_rec.name,
                 location_lat=attr_rec.location_lat,
                 location_lon=attr_rec.location_lon,
-                arrival_time=arrival,
-                departure_time=departure,
-                visit_duration_minutes=attr_rec.visit_duration_minutes,
+                arrival_time=_m2t(arrival_min),
+                departure_time=_m2t(departure_min),
+                visit_duration_minutes=duration_min,
                 activity_type="attraction",
-                estimated_cost=attr_rec.entry_cost,
+                estimated_cost=0.0,
             )
             day.route_points.append(rp)
             day.daily_budget_used += rp.estimated_cost
 
-            t_cur = departure
+            t_cur_min    = departure_min
             prev_node_id = node_id
-            sequence += 1
+            sequence    += 1
+
+            # Rule 5: accumulate continuous sightseeing minutes
+            continuous_min += int(Dij) + buffer_min + duration_min
+            if continuous_min >= _MAX_CONTINUOUS_SIGHT_MIN:
+                # 3-hour threshold reached — reset counter.
+                # _inject_meals_smart() will detect this gap and slot a break.
+                continuous_min = 0
 
         return day

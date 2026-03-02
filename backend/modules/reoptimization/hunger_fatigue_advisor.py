@@ -303,10 +303,8 @@ class HungerFatigueAdvisor:
         state:      "TripState",
     ) -> float:
         """
-        sc5 penalty due to fatigue.
-
-        Only applied when fatigue_level ≥ FATIGUE_TRIGGER_THRESHOLD.
-        Scaled by attraction.intensity_level.
+        Fatigue penalty when fatigue_level ≥ FATIGUE_TRIGGER_THRESHOLD.
+        intensity_level removed from AttractionRecord; defaults to "medium" via getattr.
         """
         if state.fatigue_level < FATIGUE_TRIGGER_THRESHOLD:
             return 0.0

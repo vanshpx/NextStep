@@ -16,6 +16,19 @@ from modules.reoptimization.hunger_fatigue_advisor import (
     MealOption,
 )
 from modules.reoptimization.session import ReOptimizationSession
+from modules.reoptimization.agent_action import ActionType, AgentAction
+from modules.reoptimization.agent_controller import AgentController, AgentObservation
+from modules.reoptimization.execution_layer import ExecutionLayer, ExecutionResult
+from modules.reoptimization.alternative_generator import (
+    AlternativeGenerator, AlternativeOption,
+)
+from modules.reoptimization.agents import (
+    BaseAgent, AgentContext,
+    OrchestratorAgent, OrchestratorResult,
+    DisruptionAgent, PlanningAgent, BudgetAgent,
+    PreferenceAgent, MemoryAgent, ExplanationAgent,
+    AgentDispatcher, DispatchResult,
+)
 
 __all__ = [
     "TripState",
@@ -41,4 +54,25 @@ __all__ = [
     "FatigueAdvisoryResult",
     "MealOption",
     "ReOptimizationSession",
+    "AlternativeGenerator",
+    "AlternativeOption",
+    "ActionType",
+    "AgentAction",
+    "AgentController",
+    "AgentObservation",
+    "ExecutionLayer",
+    "ExecutionResult",
+    # Multi-agent architecture
+    "BaseAgent",
+    "AgentContext",
+    "OrchestratorAgent",
+    "OrchestratorResult",
+    "DisruptionAgent",
+    "PlanningAgent",
+    "BudgetAgent",
+    "PreferenceAgent",
+    "MemoryAgent",
+    "ExplanationAgent",
+    "AgentDispatcher",
+    "DispatchResult",
 ]

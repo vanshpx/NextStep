@@ -17,21 +17,40 @@ from typing import Optional
 @dataclass
 class BudgetAllocation:
     """
-    Budget distributed by Planning Module (Budget Planner).
-    Categories sourced from architecture doc; values UNSPECIFIED until Budget Planner runs.
+    Budget distributed by the deterministic BudgetPlanner engine.
 
-    TODO: MISSING — currency unit (e.g. USD, INR).
-    TODO: MISSING — min/max/percentage bounds per category.
+    Six financial categories (all amounts in INR):
+      Accommodation  — hotel / lodging spend
+      Attractions    — combined entry fees for scheduled POIs
+      Restaurants    — food & beverage across the trip
+      Transportation — ground transport (metro / auto / cab / ride-share)
+      Other_Expenses — incidentals, shopping, tips (5–10% of total)
+      Reserve_Fund   — buffer for overruns (≥ 5% of total)
+
+    Validation metadata (set by BudgetPlanner._apply_constraints_and_balance):
+      ValidationStatus  — "PASS" | "FAIL" | "PENDING"
+      RebalanceApplied  — True if any cap or floor triggered redistribution
+      DataQuality       — "REAL"            (hotel + restaurant prices from API)
+                          "CITY_INDEX"      (city-level cost index used as fallback)
+                          "MISSING_COST_DATA" (no pricing source found)
+                          "PENDING"         (not yet computed)
     """
-    Accommodation: float = 0.0
-    Attractions: float = 0.0
-    Restaurants: float = 0.0
+    # ── Financial categories ──────────────────────────────────────────────────
+    Accommodation:  float = 0.0
+    Attractions:    float = 0.0
+    Restaurants:    float = 0.0
     Transportation: float = 0.0
     Other_Expenses: float = 0.0
-    Reserve_Fund: float = 0.0
+    Reserve_Fund:   float = 0.0
+
+    # ── Validation metadata ───────────────────────────────────────────────────
+    ValidationStatus: str  = "PENDING"
+    RebalanceApplied: bool = False
+    DataQuality:      str  = "PENDING"
 
     @property
     def total(self) -> float:
+        """Sum of the six financial categories only (excludes metadata fields)."""
         return (
             self.Accommodation + self.Attractions + self.Restaurants
             + self.Transportation + self.Other_Expenses + self.Reserve_Fund

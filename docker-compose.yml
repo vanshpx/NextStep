@@ -1,0 +1,67 @@
+version: "3.8"
+
+# Travel Itinerary Optimizer — Local Development Stack
+# Starts PostgreSQL 16 + Redis 7 with sane defaults.
+#
+# Usage:
+#   docker compose up -d           # start in background
+#   docker compose down            # stop and remove containers
+#   docker compose down -v         # also delete volumes (resets DB data)
+#
+# Apply schema after first start:
+#   cd backend && python scripts/run_migrations.py
+#
+# Config (all variables have defaults matching this compose file —
+# override in backend/.env or export before running the pipeline):
+#
+#   POSTGRES_HOST=localhost   POSTGRES_PORT=5432
+#   POSTGRES_DB=nextstep      POSTGRES_USER=nextstep_user
+#   POSTGRES_PASSWORD=nextstep_pass
+#   REDIS_HOST=localhost      REDIS_PORT=6379
+
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: nextstep_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       nextstep
+      POSTGRES_USER:     nextstep_user
+      POSTGRES_PASSWORD: nextstep_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextstep_user -d nextstep"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis 7 ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: nextstep_redis
+    restart: unless-stopped
+    # AOF persistence — required for TripState durability
+    # Source: docs/database/05-implementation.sql § Step 4 Redis configuration
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

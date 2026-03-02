@@ -1,0 +1,366 @@
+{
+	"info": {
+		"_postman_id": "4b78b43e-8729-4374-b145-ad14d5fa7d45",
+		"name": "HotelAPI Client",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "21059317"
+	},
+	"item": [
+		{
+			"name": "Search",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"CheckIn\": \"2025-11-20\",\r\n    \"CheckOut\": \"2025-11-24\",\r\n    \"HotelCodes\": \"376565,1345318,1345320,1200255,1128760,1250333,1078234,1347149,1358855,1345321,1108025,1356271,1267547\",\r\n    \"GuestNationality\": \"AE\",\r\n    \"PaxRooms\": [\r\n        {\r\n            \"Adults\": 1,\r\n            \"Children\": 0,\r\n            \"ChildrenAges\": [\r\n                0\r\n            ]\r\n        }\r\n    ],\r\n    \"ResponseTime\": 20.0,\r\n    \"IsDetailedResponse\": true,\r\n    \"Filters\": {\r\n        \"Refundable\": true,\r\n        \"NoOfRooms\": 0,\r\n        \"MealType\": 0,\r\n        \"OrderBy\": 0,\r\n        \"StarRating\": 0,\r\n        \"HotelName\": null\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/search",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"search"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PreBook",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"BookingCode\": \"1160804!TB!10!TB!6110a41c-558c-405c-a0d3-6bdd3e131146\",\r\n    \"PaymentMode\": \"Limit\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/PreBook",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"PreBook"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "HotelBook",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"BookingCode\": \"1345320!TB!3!TB!af78e57f-a8f7-4316-afaa-705e86b507d3\",\r\n    \"CustomerDetails\": [\r\n        {\r\n            \"CustomerNames\": [\r\n                {\r\n                    \"Title\": \"Dr\",\r\n                    \"FirstName\": \"TestGuest\",\r\n                    \"LastName\": \"One\",\r\n                    \"Type\": \"Adult\"\r\n                }               \r\n            ]\r\n        }\r\n    ],\r\n    \"ClientReferenceId\": \"2070936111404-097445232\",\r\n    \"BookingReferenceId\": \"742955723103628\",\r\n    \"TotalFare\": 164.65,\r\n    \"EmailId\": \"himanshu.kumawat@tbo.com\",\r\n    \"PhoneNumber\": \"919999999999\",\r\n    \"BookingType\": \"Voucher\",\r\n    \"PaymentMode\": \"Limit\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/Book",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"Book"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "BookingDetail",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    // \"BookingReferenceId\": \"742955723103628\",\r\n    \"ConfirmationNumber\": \"KOI5G4\",\r\n    \"PaymentMode\": \"Limit\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/BookingDetail",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"BookingDetail"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "BookingDetailsBasedOnDate",
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "password",
+							"value": "",
+							"type": "string"
+						},
+						{
+							"key": "username",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"FromDate\": \"2024-06-28\",\r\n    \"ToDate\": \"2024-07-30\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/BookingDetailsBasedOnDate",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"BookingDetailsBasedOnDate"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Cancel",
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "password",
+							"value": "",
+							"type": "string"
+						},
+						{
+							"key": "username",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"ConfirmationNumber\": \"ANPWCS\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/Cancel",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"Cancel"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "CountryList",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/CountryList",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"CountryList"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "CityList",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n\r\n\"CountryCode\" :\"MV\"\r\n\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/CityList",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"CityList"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TBOHotelCodeList",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"CityCode\": \"130543\",\r\n    \"IsDetailedResponse\": \"true\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/TBOHotelCodeList",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"TBOHotelCodeList"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Hotel Details",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"Hotelcodes\": \"376565,1345318,1345320,1200255,1128760,1250333,1078234,1347149,1358855,1345321,1108025,1356271,1267547\",\r\n    \"Language\": \"EN\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://api.tbotechnology.in/TBOHolidays_HotelAPI/Hoteldetails",
+					"protocol": "http",
+					"host": [
+						"api",
+						"tbotechnology",
+						"in"
+					],
+					"path": [
+						"TBOHolidays_HotelAPI",
+						"Hoteldetails"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{
+				"key": "password",
+				"value": "",
+				"type": "string"
+			},
+			{
+				"key": "username",
+				"value": "",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}

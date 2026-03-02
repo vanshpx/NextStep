@@ -28,11 +28,71 @@ from schemas.constraints import (
     CommonsenseConstraints,
     ConstraintBundle,
     HardConstraints,
+    PassengerDetails,
     SoftConstraints,
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Soft constraint extraction prompt
+# ─────────────────────────────────────────────────────────────────────────────# Local keyword → category map (USE_STUB_LLM-safe interest extractor)
+# ────────────────────────────────────────────────────────────────────────────
+_INTEREST_KEYWORD_MAP: dict[str, str] = {
+    # Nature / outdoor
+    "beach": "natural_feature",  "beaches": "natural_feature",
+    "nature": "park",            "garden": "park",
+    "park": "park",              "parks": "park",
+    "hike": "natural_feature",   "hiking": "natural_feature",
+    "trek": "natural_feature",   "trekking": "natural_feature",
+    "adventure": "natural_feature",
+    # Culture / heritage
+    "museum": "museum",          "museums": "museum",
+    "history": "museum",         "historical": "museum",
+    "heritage": "landmark",      "monument": "landmark",
+    "fort": "landmark",          "palace": "landmark",
+    "castle": "landmark",        "landmark": "landmark",
+    # Worship
+    "temple": "temple",          "temples": "temple",
+    "shrine": "place_of_worship", "mosque": "place_of_worship",
+    "church": "place_of_worship", "worship": "place_of_worship",
+    # Shopping / markets
+    "market": "market",          "markets": "market",
+    "shopping": "market",        "bazaar": "market",
+    "shop": "market",
+    # Art
+    "art": "art_gallery",        "gallery": "art_gallery",
+    "galleries": "art_gallery",  "painting": "art_gallery",
+    # Wildlife
+    "zoo": "zoo",                "wildlife": "zoo",
+    "safari": "zoo",             "animals": "zoo",
+    # Food / dining
+    "food": "restaurant",        "cuisine": "restaurant",
+    "dining": "restaurant",      "eat": "restaurant",
+    "restaurant": "restaurant",  "foodie": "restaurant",
+    "street food": "restaurant",
+    "cafe": "restaurant",        "cafes": "restaurant",
+    "coffee": "restaurant",      "coffee shop": "restaurant",
+    "bakery": "restaurant",      "brunch": "restaurant",
+    "dessert": "restaurant",     "sweets": "restaurant",
+    "tea": "restaurant",
+    # Nightlife
+    "bar": "nightlife",          "bars": "nightlife",
+    "pub": "nightlife",          "pubs": "nightlife",
+    "club": "nightlife",         "clubs": "nightlife",
+    "nightlife": "nightlife",    "night out": "nightlife",
+    # Wellness / relaxation
+    "spa": "spa",                "massage": "spa",
+    "yoga": "spa",               "wellness": "spa",
+    "relax": "spa",              "relaxation": "spa",
+    # Entertainment / amusement
+    "amusement": "amusement_park", "theme park": "amusement_park",
+    "waterpark": "amusement_park", "carnival": "amusement_park",
+    # Scenic / viewpoints
+    "viewpoint": "natural_feature", "sunset": "natural_feature",
+    "sunrise": "natural_feature",   "scenic": "natural_feature",
+    "lake": "natural_feature",      "river": "natural_feature",
+    "waterfall": "natural_feature", "mountain": "natural_feature",
+    "hill": "natural_feature",
+}
+
+# ────────────────────────────────────────────────────────────────────────────# Soft constraint extraction prompt
 # ─────────────────────────────────────────────────────────────────────────────
 _SC_EXTRACTION_PROMPT = """You are a travel assistant analysing a user's preferences from a conversation.
 
@@ -91,6 +151,8 @@ class ChatIntake:
         self._soft = SoftConstraints()
         self._commonsense = CommonsenseConstraints()
         self._total_budget: float = 0.0
+        self._raw_chat_text: str = ""   # Phase 2 history — used for local extraction + validation
+        self._passengers: list[PassengerDetails] = []
 
     # ─────────────────────────────────────────────────────────────────────────
     # Public entry point
@@ -101,10 +163,36 @@ class ChatIntake:
         self._print_banner()
         self._phase1_form()
         self._phase2_chat()
+        self._phase3_passengers()
+
+        # ── Derive spending_power from budget if still unset ──────────────
+        if not self._soft.spending_power and self._total_budget > 0:
+            num_people = max(self._hard.num_adults + self._hard.num_children, 1)
+            days = 1
+            if self._hard.departure_date and self._hard.return_date:
+                delta = (self._hard.return_date - self._hard.departure_date).days
+                if delta > 0:
+                    days = delta
+            per_person_per_day = self._total_budget / num_people / days
+            if per_person_per_day < 3000:
+                self._soft.spending_power = "low"
+            elif per_person_per_day < 8000:
+                self._soft.spending_power = "medium"
+            else:
+                self._soft.spending_power = "high"
+
         bundle = ConstraintBundle(
             hard=self._hard,
             soft=self._soft,
             commonsense=self._commonsense,
+            total_budget=self._total_budget,
+            has_chat_input=bool(self._raw_chat_text.strip()),
+            passengers=self._passengers,
+        )
+        # Bind: assert user budget stored in bundle
+        assert bundle.total_budget == self._total_budget, (
+            f"INPUT_BINDING_ERROR: bundle.total_budget={bundle.total_budget} "
+            f"!= collected budget={self._total_budget}"
         )
         return bundle, self._total_budget
 
@@ -138,20 +226,7 @@ class ChatIntake:
         except ValueError:
             self._hard.num_children = 0
 
-        self._hard.group_size = self._hard.num_adults + self._hard.num_children
-
-        # Traveler ages (optional) — used for age-restriction HC checks
-        ages_raw = self._ask(
-            "  Ages of all travellers (comma-separated, e.g. 35,32,10): ",
-            required=False,
-        )
-        if ages_raw:
-            try:
-                self._hard.traveler_ages = [
-                    int(a.strip()) for a in ages_raw.split(",") if a.strip().isdigit()
-                ]
-            except ValueError:
-                self._hard.traveler_ages = []
+        # group_size and traveler_ages removed — no venue capacity/age API source
 
         self._hard.restaurant_preference = (
             self._ask("  Food preference (e.g. Indian / Vegetarian / No preference): ",
@@ -171,6 +246,12 @@ class ChatIntake:
                 self._total_budget = float(raw.replace(",", "").replace("₹", "").strip())
             except ValueError:
                 print("  ⚠  Please enter a valid number.")
+
+        nationality = self._ask(
+            "  Your nationality (ISO-2 code, e.g. IN for India) [IN]: ",
+            required=False,
+        ) or "IN"
+        self._hard.guest_nationality = nationality.strip().upper()[:2]
 
         print("\n  ✓ Trip details saved.\n")
 
@@ -196,19 +277,100 @@ class ChatIntake:
             print("  (No preferences provided — using defaults)\n")
             return
 
-        # Send full chat history to LLM for SC extraction
         history_text = "\n  ".join(history)
+        self._raw_chat_text = history_text  # store for validation + local extraction
+
+        # ── Step 1: Local keyword extraction (always runs, USE_STUB_LLM-safe) ──────────
+        local_interests = self._extract_interests_local(history_text)
+        if local_interests:
+            self._soft.interests = list(
+                dict.fromkeys(self._soft.interests + local_interests)
+            )
+
+        # ── Step 2: LLM extraction (supplements local results when LLM is real) ─────
         prompt = _SC_EXTRACTION_PROMPT.format(history=history_text)
         try:
             raw = self._llm.complete(prompt)
             extracted = self._parse_json(raw)
-            self._apply_sc(extracted)
-            print("\n  ✓ Preferences extracted.\n")
+            if extracted:                     # skip stub no-op response
+                self._apply_sc(extracted)
         except Exception as exc:
-            print(f"\n  ⚠  Could not extract preferences ({exc}). Using defaults.\n")
+            print(f"  [LLM] SC extraction skipped ({exc}); local extraction still applied.")
+        # ── Step 2b: Local SC fallbacks (USE_STUB_LLM-safe) ────────────────────
+        self._apply_local_sc_fallbacks(history_text)
+        # ── Step 3: Validate binding ──────────────────────────────────────────────
+        if history and not self._soft.interests:
+            print(
+                "  ⚠  INPUT_BINDING_ERROR: Preferences chat detected but no interests "
+                "could be extracted. Please describe your interests more explicitly."
+            )
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Apply extracted SC/commonsense onto internal state
+        print(f"\n  ✓ Preferences extracted: interests={self._soft.interests}")
+        if self._soft.spending_power:
+            print(f"    spending_power={self._soft.spending_power}")
+        if self._soft.pace_preference:
+            print(f"    pace_preference={self._soft.pace_preference}")
+        if self._soft.avoid_crowds:
+            print(f"    avoid_crowds={self._soft.avoid_crowds}")
+        if self._soft.dietary_preferences:
+            print(f"    dietary_preferences={self._soft.dietary_preferences}")
+        print()
+
+    # ─────────────────────────────────────────────────────────────────────────    # PHASE 3 — Passenger Details (for TBO Booking)
+    # ───────────────────────────────────────────────────────────────────────────
+
+    def _phase3_passengers(self) -> None:
+        total = self._hard.num_adults + self._hard.num_children
+        print("── Phase 3: Passenger Details (required for booking) ────────")
+        print(f"  Collecting details for {total} passenger(s).")
+        print("  Press Enter to skip optional fields.\n")
+        self._passengers = []
+        for i in range(self._hard.num_adults):
+            print(f"  ── Adult {i + 1} ───────────────────────")
+            self._passengers.append(self._collect_one_passenger(passenger_type=1))
+        for i in range(self._hard.num_children):
+            print(f"  ── Child {i + 1} ───────────────────────")
+            self._passengers.append(self._collect_one_passenger(passenger_type=2))
+        print(f"\n  ✓ {len(self._passengers)} passenger(s) registered.\n")
+
+    def _collect_one_passenger(self, passenger_type: int) -> PassengerDetails:
+        type_label = "Adult" if passenger_type == 1 else "Child"
+        p = PassengerDetails(passenger_type=passenger_type)
+
+        raw_title = self._ask(f"    Title (Mr/Mrs/Ms/Dr) [Mr]: ", required=False) or "Mr"
+        p.title = raw_title.strip()
+
+        p.first_name = self._ask(f"    First name*: ", required=True)
+        p.last_name  = self._ask(f"    Last name*: ",  required=True)
+
+        while not p.date_of_birth:
+            raw = self._ask(f"    Date of birth (YYYY-MM-DD)*: ", required=True)
+            try:
+                datetime.strptime(raw.strip(), "%Y-%m-%d")
+                p.date_of_birth = raw.strip()
+            except ValueError:
+                print("    ⚠  Use format YYYY-MM-DD.")
+
+        raw_gender = self._ask(f"    Gender (M/F) [M]: ", required=False) or "M"
+        p.gender = 2 if raw_gender.strip().upper().startswith("F") else 1
+
+        p.email  = self._ask(f"    Email (optional): ",  required=False) or ""
+        p.mobile = self._ask(f"    Mobile number (digits, optional): ", required=False) or ""
+
+        p.mobile_country_code = (
+            self._ask(f"    Mobile country code (e.g. 91) [91]: ", required=False) or "91"
+        )
+        p.nationality_code = (
+            self._ask(f"    Nationality ISO-2 code (e.g. IN) [IN]: ", required=False) or "IN"
+        ).upper()[:2]
+
+        p.id_number = self._ask(f"    ID/Passport number (optional): ", required=False) or ""
+        if p.id_number:
+            p.id_expiry = self._ask(f"    ID expiry date (YYYY-MM-DD, optional): ", required=False) or ""
+
+        return p
+
+    # ───────────────────────────────────────────────────────────────────────────    # Apply extracted SC/commonsense onto internal state
     # ─────────────────────────────────────────────────────────────────────────
 
     def _apply_sc(self, ext: dict) -> None:
@@ -264,6 +426,96 @@ class ChatIntake:
         for rule in c.get("rules", []):
             if rule and rule not in self._commonsense.rules:
                 self._commonsense.rules.append(rule)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Local keyword-based SC fallback (USE_STUB_LLM-safe)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    _PACE_KEYWORDS: dict[str, str] = {
+        "slow": "relaxed", "relaxed": "relaxed", "easy": "relaxed",
+        "chill": "relaxed", "leisurely": "relaxed", "laid back": "relaxed",
+        "fast": "fast", "packed": "fast", "maximum": "fast",
+        "intense": "fast", "non-stop": "fast", "nonstop": "fast",
+    }
+
+    _CROWD_KEYWORDS: set[str] = {
+        "avoid crowd", "avoid crowds", "no crowd", "no crowds",
+        "hate crowd", "hate crowds", "less crowd", "less crowded",
+        "quiet", "peaceful", "secluded", "uncrowded", "off the beaten path",
+    }
+
+    _DIETARY_KEYWORDS: dict[str, str] = {
+        "vegetarian": "vegetarian", "vegan": "vegan", "veg": "vegetarian",
+        "halal": "halal", "kosher": "kosher", "gluten free": "gluten_free",
+        "gluten-free": "gluten_free", "non-veg": "non_vegetarian",
+        "non veg": "non_vegetarian", "jain": "jain",
+    }
+
+    _SPENDING_KEYWORDS: dict[str, str] = {
+        "budget": "low", "cheap": "low", "affordable": "low",
+        "economy": "low", "backpack": "low", "backpacker": "low",
+        "mid-range": "medium", "mid range": "medium", "moderate": "medium",
+        "comfort": "medium", "comfortable": "medium",
+        "luxury": "high", "premium": "high", "splurge": "high",
+        "five star": "high", "5 star": "high", "upscale": "high",
+    }
+
+    def _apply_local_sc_fallbacks(self, text: str) -> None:
+        """
+        Keyword-based extraction for soft-constraint fields that the LLM
+        would normally handle. Ensures values are set even with USE_STUB_LLM=true.
+        Only sets a field if it has not already been set (by LLM or otherwise).
+        """
+        lower = text.lower()
+
+        # ── spending_power from chat keywords ──────────────────────────────
+        if not self._soft.spending_power:
+            for kw, level in self._SPENDING_KEYWORDS.items():
+                pattern = r"(?<!\w)" + re.escape(kw) + r"(?!\w)"
+                if re.search(pattern, lower):
+                    self._soft.spending_power = level
+                    break
+
+        # ── pace_preference ────────────────────────────────────────────────
+        if not self._soft.pace_preference:
+            for kw, pace in self._PACE_KEYWORDS.items():
+                pattern = r"(?<!\w)" + re.escape(kw) + r"(?!\w)"
+                if re.search(pattern, lower):
+                    self._soft.pace_preference = pace
+                    break
+
+        # ── avoid_crowds ──────────────────────────────────────────────────
+        for kw in self._CROWD_KEYWORDS:
+            if kw in lower:
+                self._soft.avoid_crowds = True
+                break
+
+        # ── dietary_preferences ───────────────────────────────────────────
+        for kw, pref in self._DIETARY_KEYWORDS.items():
+            pattern = r"(?<!\w)" + re.escape(kw) + r"(?!\w)"
+            if re.search(pattern, lower):
+                if pref not in self._soft.dietary_preferences:
+                    self._soft.dietary_preferences.append(pref)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Local keyword-based interest extractor (USE_STUB_LLM-safe)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_interests_local(text: str) -> list[str]:
+        """
+        Keyword-based interest extraction that works without an LLM.
+        Runs always in Phase 2 so preferences survive even when USE_STUB_LLM=true.
+        Returns a deduplicated sorted list of internal category strings.
+        """
+        lower = text.lower()
+        found: set[str] = set()
+        for keyword, category in _INTEREST_KEYWORD_MAP.items():
+            # word-boundary match to avoid partial hits (e.g. "bar" in "embarked")
+            pattern = r"(?<!\w)" + re.escape(keyword) + r"(?!\w)"
+            if re.search(pattern, lower):
+                found.add(category)
+        return sorted(found)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers

@@ -1,0 +1,1891 @@
+{
+	"info": {
+		"_postman_id": "c331b14b-a402-4cbb-bb27-e719ffa0efd6",
+		"name": "TBO India Air API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "20938133",
+		"_collection_link": "https://planetary-capsule-767741.postman.co/workspace/TBOINDIA_API_AUTO~11460c5f-f2c4-4560-8708-dc53a5da7bed/collection/20938133-c331b14b-a402-4cbb-bb27-e719ffa0efd6?action=share&source=collection_link&creator=20938133"
+	},
+	"item": [
+		{
+			"name": "Oneway 1A GDS",
+			"item": [
+				{
+					"name": "Authentication Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"AUTHTokenId\", jsonData.TokenId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"packages": {},
+								"type": "text/javascript"
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"BookingMode\": \"API\",\r\n    \"UserName\": \"albukhari\",\r\n    \"Password\": \"Alb@75736496\",\r\n    \"IPAddress\": \"192.168.11.120\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Authenticate/ValidateAgency",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Authenticate",
+								"ValidateAgency"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search 1A Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"ResultIndex\", jsonData.Response.Results[0][0].ResultIndex);\r",
+									"\r",
+									"pm.environment.set(\"TraceId\", jsonData.Response.TraceId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"AdultCount\": \"1\",\r\n    \"ChildCount\": \"0\",\r\n    \"InfantCount\": \"0\",\r\n    \"IsDomestic\": \"true\",\r\n    \"BookingMode\": \"5\",\r\n    \"DirectFlight\": \"false\",\r\n    \"OneStopFlight\": \"false\",\r\n    \"JourneyType\": \"1\",\r\n    \"EndUserIp\": \"192.168.10.36\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"PreferredAirlines\": [\"AI\"],\r\n    \"Sources\": [\"1AA\"],\r\n    //\"PreferredAirlines\": [\"SG\"],\r\n    //\"Sources\": [\"SG\"],\r\n    \"Segments\": [\r\n        {\r\n            \"Origin\": \"{{Origin}}\",\r\n            \"Destination\": \"{{Destination}}\",\r\n            \"PreferredDepartureTime\": \"{{PreferredDepartureTime}}\",\r\n            \"PreferredArrivalTime\": \"{{PreferredArrivalTime}}\",\r\n            \"FlightCabinClass\": 1\r\n        }\r\n \r\n    ],\r\n    \"ResultFareType\": 0,\r\n        \"PreferredCurrency\": \"USD\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/Search/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"Search",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareQuote Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Response.Results.Fare));\r",
+									"\r",
+									"pm.environment.set(\"Segments_BE\", JSON.stringify(jsonData.Response.Results.Segments[0]));\r",
+									"\r",
+									"pm.environment.set(\"ValidatingAirline\", jsonData.Response.Results.ValidatingAirline);\r",
+									"\r",
+									"pm.environment.set(\"LastTicketDate\", JSON.stringify(jsonData.Response.Results.LastTicketDate));\r",
+									"\r",
+									"pm.environment.set(\"MiniFareRules\", JSON.stringify(jsonData.Response.Results.MiniFareRules));\r",
+									"\r",
+									"pm.environment.set(\"FareClassification\", JSON.stringify(jsonData.Response.Results.FareClassification));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareQuote/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareQuote",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareRule Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"FareRules\", JSON.stringify(jsonData.Response.FareRules));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareRule/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareRule",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "SSR Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"PaxBaggage\", JSON.stringify(jsonData.Response.Baggage[0]));\r",
+									"pm.environment.set(\"PaxSeat\", JSON.stringify(jsonData.Response.SeatDynamic[0].SegmentSeat[0].RowSeats[0].Seats[0]));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"9468\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/SSR/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"SSR",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Book With 1A GDS with Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"PNR\", jsonData.PNR);\r",
+									"\r",
+									"pm.environment.set(\"Itinerary\", JSON.stringify(jsonData.Itinerary));\r",
+									"\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Itinerary.Passenger[0].Fare_BE));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                //\"Meal\": {\r\n                //    \"Code\": \"LCML\",\r\n                //    \"Description\": \"Low Calorie\"\r\n                //},\r\n                \"Meal\": null,\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"PaxSeat\": null,\r\n                //\"PaxBaggage\": {{PaxBaggage}},\r\n                //\"PaxMeal\": {{PaxMeal}},\r\n                //\"PaxSeat\": {{PaxSeat}},\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": [\r\n                    {\r\n                        \"PaxId\": 0,\r\n                        \"IdType\": 1,\r\n                        \"IdNumber\": \"31195855\",\r\n                        \"IssuedCountryCode\": null,\r\n                        \"IssueDate\": null,\r\n                        \"ExpiryDate\": \"2026-05-18T00:00:00\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Book",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Book"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A GDS with Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                //\"Meal\": {\r\n                //    \"Code\": \"LCML\",\r\n                //    \"Description\": \"Low Calorie\"\r\n                //},\r\n                \"Meal\": null,\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": [\r\n                    {\r\n                        \"PaxId\": 0,\r\n                        \"IdType\": 1,\r\n                        \"IdNumber\": \"31195855\",\r\n                        \"IssuedCountryCode\": null,\r\n                        \"IssueDate\": null,\r\n                        \"ExpiryDate\": \"2026-05-18T00:00:00\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"{{PNR}}\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"{{PNR}}\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Book With 1A GDS without Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"PNR\", jsonData.PNR);\r",
+									"\r",
+									"pm.environment.set(\"Itinerary\", JSON.stringify(jsonData.Itinerary));\r",
+									"\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Itinerary.Passenger[0].Fare_BE));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": {\r\n                    \"Code\": \"LCML\",\r\n                    \"Description\": \"Low Calorie\"\r\n                },\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null//,\r\n                //\"IdDetails\": null\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Book",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Book"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A GDS without Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": {\r\n                    \"Code\": \"LCML\",\r\n                    \"Description\": \"Low Calorie\"\r\n                },\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": null\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"{{PNR}}\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"{{PNR}}\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Return 1A GDS",
+			"item": [
+				{
+					"name": "Authentication Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"AUTHTokenId\", jsonData.TokenId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"BookingMode\": \"API\",\r\n    \"UserName\": \"albukhari\",\r\n    \"Password\": \"Alb@75736496\",\r\n    \"IPAddress\": \"192.168.11.120\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Authenticate/ValidateAgency",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Authenticate",
+								"ValidateAgency"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search 1A Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"ResultIndex\", jsonData.Response.Results[0][0].ResultIndex);\r",
+									"\r",
+									"pm.environment.set(\"TraceId\", jsonData.Response.TraceId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"AdultCount\": \"1\",\r\n    \"ChildCount\": \"0\",\r\n    \"InfantCount\": \"0\",\r\n    \"IsDomestic\": \"true\",\r\n    \"BookingMode\": \"5\",\r\n    \"DirectFlight\": \"false\",\r\n    \"OneStopFlight\": \"false\",\r\n    \"JourneyType\": \"2\",\r\n    \"EndUserIp\": \"192.168.10.36\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"PreferredAirlines\": [\"UK\"],\r\n    \"Sources\": [\"1AA\"],\r\n    //\"PreferredAirlines\": [\"SG\"],\r\n    //\"Sources\": [\"SG\"],\r\n    \"Segments\": [\r\n        {\r\n            \"Origin\": \"{{Origin}}\",\r\n            \"Destination\": \"{{Destination}}\",\r\n            \"PreferredDepartureTime\": \"{{PreferredDepartureTime}}\",\r\n            \"PreferredArrivalTime\": \"{{PreferredArrivalTime}}\",\r\n            \"FlightCabinClass\": 1\r\n        },\r\n        {\r\n            \"Origin\": \"{{Destination}}\",\r\n            \"Destination\": \"{{Origin}}\",\r\n            \"PreferredDepartureTime\": \"{{PreferredDepartureTimeRT}}\",\r\n            \"PreferredArrivalTime\": \"{{PreferredArrivalTimeRT}}\",\r\n            \"FlightCabinClass\": 1\r\n        }\r\n \r\n    ],\r\n    \"ResultFareType\": 0,\r\n        \"PreferredCurrency\": \"USD\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/Search/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"Search",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareQuote Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Response.Results.Fare));\r",
+									"var Segments_BE1 = jsonData.Response.Results.Segments[0];\r",
+									"\r",
+									"var Segments_BE2 = jsonData.Response.Results.Segments[1];\r",
+									"// var Segments_BE = `${JSON.stringify(Segments_BE1)}, ${JSON.stringify(Segments_BE2)}`;\r",
+									"\r",
+									"var Segments_BE = [...Segments_BE1, ...Segments_BE2];\r",
+									"console.log(Segments_BE);\r",
+									"pm.environment.set(\"Segments_BE\", JSON.stringify(Segments_BE));\r",
+									"\r",
+									"pm.environment.set(\"ValidatingAirline\", jsonData.Response.Results.ValidatingAirline);\r",
+									"\r",
+									"pm.environment.set(\"LastTicketDate\", JSON.stringify(jsonData.Response.Results.LastTicketDate));\r",
+									"\r",
+									"pm.environment.set(\"MiniFareRules\", JSON.stringify(jsonData.Response.Results.MiniFareRules));\r",
+									"\r",
+									"pm.environment.set(\"FareClassification\", JSON.stringify(jsonData.Response.Results.FareClassification));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareQuote/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareQuote",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareRule Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"FareRules\", JSON.stringify(jsonData.Response.FareRules));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareRule/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareRule",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "SSR Main",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"9468\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{traceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/SSR",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"SSR"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Book With 1A GDS with Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"PNR\", jsonData.PNR);\r",
+									"\r",
+									"pm.environment.set(\"Itinerary\", JSON.stringify(jsonData.Itinerary));\r",
+									"\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Itinerary.Passenger[0].Fare_BE));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": {\r\n                    \"Code\": \"LCML\",\r\n                    \"Description\": \"Low Calorie\"\r\n                },\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": [\r\n                    {\r\n                        \"PaxId\": 0,\r\n                        \"IdType\": 1,\r\n                        \"IdNumber\": \"31195855\",\r\n                        \"IssuedCountryCode\": null,\r\n                        \"IssueDate\": null,\r\n                        \"ExpiryDate\": \"2026-05-18T00:00:00\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Book",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Book"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A GDS with Passport",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": {\r\n                    \"Code\": \"LCML\",\r\n                    \"Description\": \"Low Calorie\"\r\n                },\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": [\r\n                    {\r\n                        \"PaxId\": 0,\r\n                        \"IdType\": 1,\r\n                        \"IdNumber\": \"31195855\",\r\n                        \"IssuedCountryCode\": null,\r\n                        \"IssueDate\": null,\r\n                        \"ExpiryDate\": \"2026-05-18T00:00:00\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"{{PNR}}\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"{{PNR}}\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Book With 1A GDS without Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"PNR\", jsonData.PNR);\r",
+									"\r",
+									"pm.environment.set(\"Itinerary\", JSON.stringify(jsonData.Itinerary));\r",
+									"\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Itinerary.Passenger[0].Fare_BE));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": {\r\n                    \"Code\": \"LCML\",\r\n                    \"Description\": \"Low Calorie\"\r\n                },\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null //,\r\n                //\"IdDetails\": null\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Book",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Book"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A GDS without Passport",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"9664355353\",\r\n                \"Mobile1CountryCode\": \"966\",\r\n                \"Mobile2\": \"-\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1985-05-08T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"SA\",\r\n                    \"CountryName\": \"Saudi Arabia\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"ABT\",\r\n                    \"CityName\": \"Al Baha\"\r\n                },\r\n                \"AddressLine1\": \"Al Baha Saudi Arabia\",\r\n                \"AddressLine2\": \"Saudi Arabia\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": {\r\n                    \"Code\": \"LCML\",\r\n                    \"Description\": \"Low Calorie\"\r\n                },\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"GAZABDEEPAKMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": [],\r\n                \"PaxMeal\": [],\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": null\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": \"{{PNR}}\",\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 72,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"{{todayDate}}\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        //\"SourceSessionId\": \"03e32262-9dd6-4248-a304-ade5f182edb3\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-05-24T21:20:00\",\r\n        \"NonRefundable\": true,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": false,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"\",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 5,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Anand Pathak Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": true,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"{{PNR}}\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"115.114.12.58\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"fdhzelbwysit22iibnxsghsj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,966-4355353,Mr Deepak Gazab\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Oneway 1A LCC",
+			"item": [
+				{
+					"name": "Authentication Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"AUTHTokenId\", jsonData.TokenId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"BookingMode\": \"API\",\r\n    \"UserName\": \"albukhari\",\r\n    \"Password\": \"Alb@75736496\",\r\n    \"IPAddress\": \"192.168.11.120\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Authenticate/ValidateAgency",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Authenticate",
+								"ValidateAgency"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search 1A Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"ResultIndex\", jsonData.Response.Results[0][0].ResultIndex);\r",
+									"\r",
+									"pm.environment.set(\"TraceId\", jsonData.Response.TraceId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"AdultCount\": \"1\",\r\n    \"ChildCount\": \"0\",\r\n    \"InfantCount\": \"0\",\r\n    \"IsDomestic\": \"true\",\r\n    \"BookingMode\": \"5\",\r\n    \"DirectFlight\": \"false\",\r\n    \"OneStopFlight\": \"false\",\r\n    \"JourneyType\": \"1\",\r\n    \"EndUserIp\": \"192.168.10.36\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    //\"PreferredAirlines\": [\"UK\"],\r\n    //\"Sources\": [\"1AA\"],\r\n    \"PreferredAirlines\": [\"SG\"],\r\n    \"Sources\": [\"SG\"],\r\n    \"Segments\": [\r\n        {\r\n            \"Origin\": \"{{Origin}}\",\r\n            \"Destination\": \"{{Destination}}\",\r\n            \"PreferredDepartureTime\": \"{{PreferredDepartureTime}}\",\r\n            \"PreferredArrivalTime\": \"{{PreferredArrivalTime}}\",\r\n            \"FlightCabinClass\": 1\r\n        }\r\n \r\n    ],\r\n    \"ResultFareType\": 0,\r\n        \"PreferredCurrency\": \"USD\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/Search/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"Search",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareQuote Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Response.Results.Fare));\r",
+									"\r",
+									"pm.environment.set(\"Segments_BE\", JSON.stringify(jsonData.Response.Results.Segments[0]));\r",
+									"\r",
+									"pm.environment.set(\"ValidatingAirline\", jsonData.Response.Results.ValidatingAirline);\r",
+									"\r",
+									"pm.environment.set(\"LastTicketDate\", JSON.stringify(jsonData.Response.Results.LastTicketDate));\r",
+									"\r",
+									"pm.environment.set(\"MiniFareRules\", JSON.stringify(jsonData.Response.Results.MiniFareRules));\r",
+									"\r",
+									"pm.environment.set(\"FareClassification\", JSON.stringify(jsonData.Response.Results.FareClassification));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareQuote/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareQuote",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareRule Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"FareRules\", JSON.stringify(jsonData.Response.FareRules));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareRule/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareRule",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "SSR Main",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"9468\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{traceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/SSR",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"SSR"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A LCC with Passport",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"971-4355353\",\r\n                \"Mobile1CountryCode\": \"971\",\r\n                \"Mobile2\": \"\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1984-08-27T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"AE\",\r\n                    \"CountryName\": \"United Arab Emirates\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"QAJ\",\r\n                    \"CityName\": \"Ajman City\"\r\n                },\r\n                \"AddressLine1\": \"Ajman City United Arab Emirates\",\r\n                \"AddressLine2\": \"United Arab Emirates\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": null,\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"NARULATARUNMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": null,\r\n                \"PaxMeal\": null,\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": [\r\n                    {\r\n                        \"PaxId\": 0,\r\n                        \"IdType\": 1,\r\n                        \"IdNumber\": \"345353535\",\r\n                        \"IssuedCountryCode\": null,\r\n                        \"IssueDate\": null,\r\n                        \"ExpiryDate\": \"2031-02-13T00:00:00\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": null,\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 100,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"0001-01-01T00:00:00\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        \"SourceSessionId\": \"7fdc1982-5da6-4ed4-8d63-3587cb17369a\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-08-20T07:45:00\",\r\n        \"NonRefundable\": false,\r\n        \"AgencyId\": 54114,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": true,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"You need to provide additional Address details at Passenger Page. \",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 36013,\r\n        \"OrderKey\": null,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Tarun Narula Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"isNewBookingFlow\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": false,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"152.199.120.166\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"iny23aqmqnsrlvq1dodlxlrj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,971-4355353,Mr Tarun Narula\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A LCC without Passport",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"971-4355353\",\r\n                \"Mobile1CountryCode\": \"971\",\r\n                \"Mobile2\": \"\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1984-08-27T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"AE\",\r\n                    \"CountryName\": \"United Arab Emirates\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"QAJ\",\r\n                    \"CityName\": \"Ajman City\"\r\n                },\r\n                \"AddressLine1\": \"Ajman City United Arab Emirates\",\r\n                \"AddressLine2\": \"United Arab Emirates\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": null,\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"NARULATARUNMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": null,\r\n                \"PaxMeal\": null,\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": null\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": null,\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 100,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"0001-01-01T00:00:00\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        \"SourceSessionId\": \"7fdc1982-5da6-4ed4-8d63-3587cb17369a\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-08-20T07:45:00\",\r\n        \"NonRefundable\": false,\r\n        \"AgencyId\": 54114,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": true,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"You need to provide additional Address details at Passenger Page. \",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 36013,\r\n        \"OrderKey\": null,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Tarun Narula Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"isNewBookingFlow\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": false,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"152.199.120.166\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"iny23aqmqnsrlvq1dodlxlrj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,971-4355353,Mr Tarun Narula\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Return 1A LCC",
+			"item": [
+				{
+					"name": "Authentication Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"AUTHTokenId\", jsonData.TokenId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"BookingMode\": \"API\",\r\n    \"UserName\": \"albukhari\",\r\n    \"Password\": \"Alb@75736496\",\r\n    \"IPAddress\": \"192.168.11.120\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Authenticate/ValidateAgency",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Authenticate",
+								"ValidateAgency"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search 1A Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"ResultIndex\", jsonData.Response.Results[0][0].ResultIndex);\r",
+									"\r",
+									"pm.environment.set(\"TraceId\", jsonData.Response.TraceId);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {}
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"AdultCount\": \"1\",\r\n    \"ChildCount\": \"0\",\r\n    \"InfantCount\": \"0\",\r\n    \"IsDomestic\": \"true\",\r\n    \"BookingMode\": \"5\",\r\n    \"DirectFlight\": \"false\",\r\n    \"OneStopFlight\": \"false\",\r\n    \"JourneyType\": \"2\",\r\n    \"EndUserIp\": \"192.168.10.36\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    //\"PreferredAirlines\": [\"UK\"],\r\n    //\"Sources\": [\"1AA\"],\r\n    \"PreferredAirlines\": [\"SG\"],\r\n    \"Sources\": [\"SG\"],\r\n    \"Segments\": [\r\n        {\r\n            \"Origin\": \"{{Origin}}\",\r\n            \"Destination\": \"{{Destination}}\",\r\n            \"PreferredDepartureTime\": \"{{PreferredDepartureTime}}\",\r\n            \"PreferredArrivalTime\": \"{{PreferredArrivalTime}}\",\r\n            \"FlightCabinClass\": 1\r\n        },\r\n        {\r\n            \"Origin\": \"{{Destination}}\",\r\n            \"Destination\": \"{{Origin}}\",\r\n            \"PreferredDepartureTime\": \"{{PreferredDepartureTimeRT}}\",\r\n            \"PreferredArrivalTime\": \"{{PreferredArrivalTimeRT}}\",\r\n            \"FlightCabinClass\": 1\r\n        }\r\n \r\n    ],\r\n    \"ResultFareType\": 0,\r\n        \"PreferredCurrency\": \"USD\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/Search/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"Search",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareQuote Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"Fare_BE\", JSON.stringify(jsonData.Response.Results.Fare));\r",
+									"var Segments_BE1 = jsonData.Response.Results.Segments[0];\r",
+									"\r",
+									"var Segments_BE2 = jsonData.Response.Results.Segments[1];\r",
+									"// var Segments_BE = `${JSON.stringify(Segments_BE1)}, ${JSON.stringify(Segments_BE2)}`;\r",
+									"\r",
+									"var Segments_BE = [...Segments_BE1, ...Segments_BE2];\r",
+									"console.log(Segments_BE);\r",
+									"pm.environment.set(\"Segments_BE\", JSON.stringify(Segments_BE));\r",
+									"\r",
+									"pm.environment.set(\"ValidatingAirline\", jsonData.Response.Results.ValidatingAirline);\r",
+									"\r",
+									"pm.environment.set(\"LastTicketDate\", JSON.stringify(jsonData.Response.Results.LastTicketDate));\r",
+									"\r",
+									"pm.environment.set(\"MiniFareRules\", JSON.stringify(jsonData.Response.Results.MiniFareRules));\r",
+									"\r",
+									"pm.environment.set(\"FareClassification\", JSON.stringify(jsonData.Response.Results.FareClassification));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareQuote/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareQuote",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "FareRule Main",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();\r",
+									"pm.environment.set(\"FareRules\", JSON.stringify(jsonData.Response.FareRules));"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"{{AgencyId}}\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{TraceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/FareRule/",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"FareRule",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "SSR Main",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //\"AgencyId\": \"9468\",\r\n    \"EndUserIp\": \"::1\",\r\n    \"TraceId\": \"{{traceId}}\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"ResultIndex\": \"{{ResultIndex}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOINDIA_URL}}/SSR",
+							"host": [
+								"{{RC_TBOINDIA_URL}}"
+							],
+							"path": [
+								"SSR"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A LCC with Passport",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"971-4355353\",\r\n                \"Mobile1CountryCode\": \"971\",\r\n                \"Mobile2\": \"\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1984-08-27T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"AE\",\r\n                    \"CountryName\": \"United Arab Emirates\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"QAJ\",\r\n                    \"CityName\": \"Ajman City\"\r\n                },\r\n                \"AddressLine1\": \"Ajman City United Arab Emirates\",\r\n                \"AddressLine2\": \"United Arab Emirates\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": null,\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"NARULATARUNMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": null,\r\n                \"PaxMeal\": null,\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": [\r\n                    {\r\n                        \"PaxId\": 0,\r\n                        \"IdType\": 1,\r\n                        \"IdNumber\": \"345353535\",\r\n                        \"IssuedCountryCode\": null,\r\n                        \"IssueDate\": null,\r\n                        \"ExpiryDate\": \"2031-02-13T00:00:00\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": null,\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 100,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"0001-01-01T00:00:00\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        \"SourceSessionId\": \"7fdc1982-5da6-4ed4-8d63-3587cb17369a\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-08-20T07:45:00\",\r\n        \"NonRefundable\": false,\r\n        \"AgencyId\": 54114,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": true,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"You need to provide additional Address details at Passenger Page. \",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 36013,\r\n        \"OrderKey\": null,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Tarun Narula Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"isNewBookingFlow\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": false,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"152.199.120.166\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"iny23aqmqnsrlvq1dodlxlrj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,971-4355353,Mr Tarun Narula\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ticket With 1A LCC without Passport",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get today's date\r",
+									"let today = new Date();\r",
+									"\r",
+									"// Format the date to the desired format (e.g., YYYY-MM-DD)\r",
+									"let formattedDate = today.toISOString().split('T')[0]; // This will give you YYYY-MM-DD\r",
+									"\r",
+									"// Set the formatted date as an environment variable\r",
+									"pm.environment.set(\"todayDate\", formattedDate);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let FirstName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"FirstName = \"An\" + FirstName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"FirstName\", FirstName);\r",
+									"\r",
+									"// Function to generate a random 5-letter alphabet string\r",
+									"function generateRandomString(length) {\r",
+									"    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; // Define possible characters\r",
+									"    let result = '';\r",
+									"\r",
+									"    for (let i = 0; i < length; i++) {\r",
+									"        const randomIndex = Math.floor(Math.random() * characters.length); // Get a random index\r",
+									"        result += characters[randomIndex]; // Append a random character to the result\r",
+									"    }\r",
+									"\r",
+									"    return result;\r",
+									"}\r",
+									"\r",
+									"// Generate a random 5-letter string\r",
+									"let LastName = generateRandomString(5);\r",
+									"\r",
+									"// Concatenate \"An\" to the random string\r",
+									"LastName = \"Pa\" + LastName;\r",
+									"\r",
+									"// Set the random string as an environment variable\r",
+									"pm.environment.set(\"LastName\", LastName);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"ResultId\": \"{{ResultIndex}}\",\r\n    \"Itinerary\": {\r\n        \"AgencySalesRepresentative\": 0,\r\n        \"IsHoldEligibleForLcc\": false,\r\n        \"IsManual\": false,\r\n        \"IssuancePCC\": null,\r\n        \"FlightId\": 0,\r\n        \"Segments_BE\": {{Segments_BE}},\r\n        \"Passenger\": [\r\n            {\r\n                \"PassportIssueCountryCode\": null,\r\n                \"PassportIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PaxId\": 0,\r\n                \"Title\": \"Mr\",\r\n                \"FirstName\": \"{{FirstName}}\",\r\n                \"LastName\": \"{{LastName}}\",\r\n                \"Mobile1\": \"971-4355353\",\r\n                \"Mobile1CountryCode\": \"971\",\r\n                \"Mobile2\": \"\",\r\n                \"Mobile2CountryCode\": \"\",\r\n                \"IsLeadPax\": true,\r\n                \"DateOfBirth\": \"1984-08-27T00:00:00\",\r\n                \"Type\": 1,\r\n                \"PassengerIdType\": 0,\r\n                \"PassengerIdNo\": null,\r\n                \"PassengerIdExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueDate\": \"0001-01-01T00:00:00\",\r\n                \"PassengerIdIssueCountryCode\": null,\r\n                \"PassportNo\": null,\r\n                \"Nationality\": {\r\n                    \"CountryCode\": \"IN\",\r\n                    \"CountryName\": \"India\"\r\n                },\r\n                \"Country\": {\r\n                    \"CountryCode\": \"AE\",\r\n                    \"CountryName\": \"United Arab Emirates\"\r\n                },\r\n                \"City\": {\r\n                    \"CountryCode\": null,\r\n                    \"CityCode\": \"QAJ\",\r\n                    \"CityName\": \"Ajman City\"\r\n                },\r\n                \"AddressLine1\": \"Ajman City United Arab Emirates\",\r\n                \"AddressLine2\": \"United Arab Emirates\",\r\n                \"Gender\": 1,\r\n                \"Email\": \"sdfs@gmail.com\",\r\n                \"Meal\": null,\r\n                \"Seat\": null,\r\n                \"Fare_BE\": {{Fare_BE}},\r\n                \"FFAirline\": null,\r\n                \"FFNumber\": null,\r\n                \"PaxKey\": \"NARULATARUNMR\",\r\n                \"TboAirPaxId\": 0,\r\n                \"PassportExpiry\": \"0001-01-01T00:00:00\",\r\n                \"PaxBaggage\": null,\r\n                \"PaxMeal\": null,\r\n                \"IDCardNo\": null,\r\n                \"ZipCode\": null,\r\n                \"PaxSeat\": null,\r\n                \"Ticket\": null,\r\n                \"PaxStatus\": 0,\r\n                \"TurkeyNumber\": null,\r\n                \"SavePaxDetails\": true,\r\n                \"IsTboAirBaggageAdded\": false,\r\n                \"IdDetailCode\": null,\r\n                \"DocumentDetails\": null,\r\n                \"IdDetails\": null\r\n            }\r\n        ],\r\n        \"FareRules\": {{FareRules}},\r\n        \"PNR\": null,\r\n        \"InactivePNR\": null,\r\n        \"SplitPNR\": null,\r\n        \"SupplierCode\": null,\r\n        \"FlightBookingSource\": 100,\r\n        \"Destination\": \"{{Destination}}\",\r\n        \"FareType\": \"PUBL\",\r\n        \"LastTicketDate\": {{LastTicketDate}},\r\n        \"LastVoidDate\": \"0001-01-01T00:00:00\",\r\n        \"Origin\": \"{{Origin}}\",\r\n        \"CreatedOn\": \"0001-01-01T00:00:00\",\r\n        \"TboAirBookingSourceId\": 0,\r\n        \"PaymentMode\": 0,\r\n        \"SourceSessionId\": \"7fdc1982-5da6-4ed4-8d63-3587cb17369a\",\r\n        \"FailedBookingId\": 0,\r\n        \"ValidatingAirline\": null,\r\n        \"ValidatingAirlineCode\": \"{{ValidatingAirline}}\",\r\n        \"Ticketed\": false,\r\n        \"IsDomestic\": false,\r\n        \"AirlineCode\": null,\r\n        \"TravelDate\": \"2024-08-20T07:45:00\",\r\n        \"NonRefundable\": false,\r\n        \"AgencyId\": 54114,\r\n        \"BookingId\": 0,\r\n        \"BookingMode\": 1,\r\n        \"AgentRefNo\": null,\r\n        \"IsLcc\": true,\r\n        \"ClientIP\": null,\r\n        \"AirlineRemark\": \"You need to provide additional Address details at Passenger Page. \",\r\n        \"SearchType\": 1,\r\n        \"OnBehalfOf\": 0,\r\n        \"EarnedLoyaltyPoints\": 0,\r\n        \"TrackingId\": \"{{TraceId}}\",\r\n        \"SupplierGroupId\": 36013,\r\n        \"OrderKey\": null,\r\n        \"TripId\": null,\r\n        \"TripName\": \"Tarun Narula Trip\",\r\n        \"PNRStatus\": 0,\r\n        \"StaffRemarks\": null,\r\n        \"PricingKeyDetail\": null,\r\n        \"TokenId\": \"{{AUTHTokenId}}\",\r\n        \"SSRData\": null,\r\n        \"isNewBooking\": false,\r\n        \"isNewBookingFlow\": false,\r\n        \"ParentBookingId\": 0,\r\n        \"isFromBulkImport\": false,\r\n        \"isApplicableforNewWidgetWallet\": false,\r\n        \"callBackUrl\": \"tboairdemo.techmaster.in\",\r\n        \"isCancellationcoverAdded\": false,\r\n        \"FoidDetails\": {},\r\n        \"BookingOperations\": null,\r\n        \"UpsellOptionsList\": null,\r\n        \"PaymentKey\": null,\r\n        \"HotelConfirmationNumber\": null,\r\n        \"HelpCenter\": null,\r\n        \"MiniFareRules\": {{MiniFareRules}},\r\n        \"FareClassification\": {{FareClassification}},\r\n        \"CustomizedFareType\": null,\r\n        //\"IsVATApplicable\": false,\r\n        \"ResultType\": 2\r\n    },\r\n    \"PNR\": \"\",\r\n    \"BookingId\": \"\",\r\n    \"CorporateCode\": null,\r\n    \"ConfirmPriceChangeTicket\": false,\r\n    \"IPAddress\": \"152.199.120.166\",\r\n    \"IsGenerateTicketRequestFromQueues\": false,\r\n    \"SegmentAnalyticsToken\": \"iny23aqmqnsrlvq1dodlxlrj\",\r\n    \"TokenId\": \"{{AUTHTokenId}}\",\r\n    \"TrackingId\": \"{{TraceId}}\",\r\n    \"EndUserBrowserAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36\",\r\n    \"PointOfSale\": \"IN\",\r\n    \"RequestOrigin\": \"India-https://www.tboair.com\",\r\n    \"UserData\": \"sdfs@gmail.com,971-4355353,Mr Tarun Narula\",\r\n    \"WebServerIP\": null\r\n}"
+						},
+						"url": {
+							"raw": "{{RC_TBOAIR_URL}}/Booking/Ticket",
+							"host": [
+								"{{RC_TBOAIR_URL}}"
+							],
+							"path": [
+								"Booking",
+								"Ticket"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "url",
+			"value": "http://airBE.tektravels.com/InternalAirService.svc/rest"
+		}
+	]
+}

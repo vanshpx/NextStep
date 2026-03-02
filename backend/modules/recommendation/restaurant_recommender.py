@@ -50,7 +50,11 @@ class RestaurantRecommender(BaseRecommender):
         ctx = self._build_context(constraints, context or {})
         scored = [self._score_restaurant(r, ctx) for r in real_time_data]
         scored.sort(key=lambda x: x.S_pti, reverse=True)
-        ranked = [s.restaurant for s in scored]
+
+        # HC filter: only include restaurants that pass ALL hard constraints.
+        # Fall back to full sorted list if every restaurant fails (edge case).
+        hc_pass = [s.restaurant for s in scored if s.HC == 1]
+        ranked = hc_pass if hc_pass else [s.restaurant for s in scored]
 
         prompt = self._build_prompt(constraints, ranked, history_insights)
         _ = self._call_llm(prompt)   # TODO: parse preference notes from LLM

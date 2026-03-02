@@ -118,7 +118,7 @@ class MockLLMClient:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # These are the exact inputs a real user would type, in order:
-# Phase 1 form (10 prompts) + Phase 2 chat (4 lines + 'done')
+# Phase 1 form (10 prompts) + Phase 2 chat (4 lines + 'done') + Phase 3 passengers
 _PHASE1_ANSWERS = [
     "Mumbai",            # departure city
     "Delhi",             # destination city
@@ -126,10 +126,10 @@ _PHASE1_ANSWERS = [
     "2026-03-12",        # return date
     "2",                 # num adults
     "1",                 # num children
-    "32,30,8",           # traveler ages
     "Vegetarian",        # restaurant preference
     "no",                # wheelchair access
     "55000",             # total budget
+    "IN",                # guest nationality (new Phase 1 field)
 ]
 
 _PHASE2_ANSWERS = [
@@ -140,7 +140,46 @@ _PHASE2_ANSWERS = [
     "done",              # ends Phase 2 chat
 ]
 
-_ALL_INPUTS = _PHASE1_ANSWERS + _PHASE2_ANSWERS
+# Phase 3 — passenger details (2 adults + 1 child = 3 passengers × 10 prompts each)
+# Prompts per passenger: title, first_name, last_name, dob, gender, email,
+#   mobile, mobile_country_code, nationality_code, id_number
+_PHASE3_ANSWERS = [
+    # ── Adult 1 ──
+    "",           # title → default Mr
+    "Test",       # first name
+    "User",       # last name
+    "1990-01-01", # dob
+    "",           # gender → default M
+    "",           # email
+    "",           # mobile
+    "",           # mobile country code → 91
+    "",           # nationality code → IN
+    "",           # id number → skip (no expiry asked)
+    # ── Adult 2 ──
+    "",           # title
+    "Test",       # first name
+    "UserTwo",    # last name
+    "1985-06-15", # dob
+    "",           # gender
+    "",           # email
+    "",           # mobile
+    "",           # mobile country code
+    "",           # nationality code
+    "",           # id number
+    # ── Child 1 ──
+    "",           # title
+    "Test",       # first name
+    "Child",      # last name
+    "2015-03-20", # dob
+    "",           # gender
+    "",           # email
+    "",           # mobile
+    "",           # mobile country code
+    "",           # nationality code
+    "",           # id number
+]
+
+_ALL_INPUTS = _PHASE1_ANSWERS + _PHASE2_ANSWERS + _PHASE3_ANSWERS
 
 
 def _make_input_gen(answers: list[str]) -> Iterator[str]:
@@ -271,8 +310,7 @@ def run_full_pipeline_test() -> None:
     _ok(f"Dates          : {hard.departure_date} — {hard.return_date}  "
         f"({(hard.return_date - hard.departure_date).days} nights)")
     _ok(f"Group          : {hard.num_adults} adults + {hard.num_children} child(ren) "
-        f"= group_size {hard.group_size}")
-    _ok(f"Traveler ages  : {hard.traveler_ages}")
+        f"= total {hard.total_travelers}")
     _ok(f"Food pref      : {hard.restaurant_preference}")
     _ok(f"Wheelchair     : {hard.requires_wheelchair}")
 
@@ -753,6 +791,803 @@ def run_full_pipeline_test() -> None:
     _ok(f"hunger_level at end         : {hf_session.state.hunger_level:.2f}")
     _ok(f"fatigue_level at end        : {hf_session.state.fatigue_level:.2f}")
     _ok("All Part 6 assertions passed ✓")
+
+    # =========================================================================
+    # PART 7 — AGENT CONTROLLER  (observe → evaluate → execute)
+    # =========================================================================
+    _banner("PART 7 — AGENT CONTROLLER")
+
+    from modules.reoptimization.agent_action import ActionType, AgentAction
+    from modules.reoptimization.agent_controller import AgentController, AgentObservation
+    from modules.reoptimization.execution_layer import ExecutionLayer, ExecutionResult
+
+    # Build a FRESH session for agent tests (Part 4 session has disruption history)
+    agent_session = ReOptimizationSession.from_itinerary(
+        itinerary=itinerary,
+        constraints=bundle,
+        remaining_attractions=all_attractions,
+        hotel_lat=28.6139,
+        hotel_lon=77.2090,
+        start_day=1,
+    )
+
+    _section("7a — Agent observes + evaluates: NO_ACTION (no disruption)")
+    result_7a = agent_session.agent_evaluate(
+        crowd_level=0.10,
+        weather_condition="clear",
+        traffic_level=0.05,
+    )
+    assert result_7a.executed, "Agent NO_ACTION must execute successfully"
+    assert result_7a.action.action_type == ActionType.NO_ACTION, \
+        f"Expected NO_ACTION, got {result_7a.action.action_type}"
+    _ok(f"Agent action: {result_7a.action.action_type.value}")
+    _ok(f"Reasoning   : {result_7a.action.reasoning}")
+
+    _section("7b — Agent observes + evaluates: DEFER_POI (high crowd)")
+    # Clear any pending decision left over from prior parts
+    agent_session.pending_decision = None
+    result_7b = agent_session.agent_evaluate(
+        crowd_level=0.90,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    assert result_7b.executed, "Agent DEFER_POI must execute successfully"
+    _ok(f"Agent action: {result_7b.action.action_type.value}")
+    _ok(f"Reasoning   : {result_7b.action.reasoning}")
+    # DEFER or REQUEST_USER_DECISION depending on S_pti
+    assert result_7b.action.action_type in (
+        ActionType.DEFER_POI, ActionType.REQUEST_USER_DECISION,
+        ActionType.REOPTIMIZE_DAY,
+    ), f"Expected DEFER/REQUEST/REOPTIMIZE, got {result_7b.action.action_type}"
+
+    _section("7c — Safety guardrails block forbidden parameters")
+    from modules.reoptimization.execution_layer import ExecutionLayer as _EL
+    _test_action = AgentAction(
+        action_type=ActionType.DEFER_POI,
+        target_poi="test",
+        reasoning="test",
+        parameters={"change_hotel": True},
+    )
+    violation = _EL._check_guardrails(_test_action)
+    assert violation, "Guardrail must block change_hotel parameter"
+    _ok(f"Guardrail blocked: {violation}")
+
+    _section("7d — Agent → ExecutionLayer full pipeline (weather REPLACE)")
+    agent_session.pending_decision = None
+    result_7d = agent_session.agent_evaluate(
+        crowd_level=0.0,
+        weather_condition="stormy",
+        traffic_level=0.0,
+    )
+    _ok(f"Agent action: {result_7d.action.action_type.value}")
+    _ok(f"Reasoning   : {result_7d.action.reasoning}")
+    # stormy = severity 1.0 ≥ HC_UNSAFE → REPLACE_POI or REOPTIMIZE_DAY
+    assert result_7d.action.action_type in (
+        ActionType.REPLACE_POI, ActionType.REOPTIMIZE_DAY,
+        ActionType.DEFER_POI, ActionType.NO_ACTION,
+    ), f"Unexpected action: {result_7d.action.action_type}"
+
+    _section("7e — AgentAction schema serialisation")
+    d = result_7a.action.to_dict()
+    assert "action_type" in d, "to_dict must contain action_type"
+    assert "reasoning" in d, "to_dict must contain reasoning"
+    _ok(f"AgentAction.to_dict(): {d}")
+
+    _ok("All Part 7 assertions passed ✓")
+
+    # =========================================================================
+    # PART 8 — MULTI-AGENT ORCHESTRATOR (orchestrate → specialist → execute)
+    # =========================================================================
+    _banner("PART 8 — MULTI-AGENT ORCHESTRATOR")
+
+    from modules.reoptimization.agents import (
+        OrchestratorAgent, OrchestratorResult, AgentContext,
+        DisruptionAgent, PlanningAgent, BudgetAgent,
+        PreferenceAgent, MemoryAgent, ExplanationAgent,
+        AgentDispatcher, DispatchResult,
+    )
+
+    # Build a fresh session for multi-agent tests
+    orch_session = ReOptimizationSession.from_itinerary(
+        itinerary=itinerary,
+        constraints=bundle,
+        remaining_attractions=all_attractions,
+        hotel_lat=28.6139,
+        hotel_lon=77.2090,
+        start_day=1,
+    )
+
+    # ── 8a — OrchestratorAgent routes crowd → DisruptionAgent ─────────────
+    _section("8a — Orchestrator routes crowd → DisruptionAgent")
+    obs_8a = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.90,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    ctx_8a = AgentContext(observation=obs_8a, event_type="crowd")
+    routing_8a = orch_session._orchestrator.route(ctx_8a)
+    assert routing_8a.invoke_agent == "DisruptionAgent", \
+        f"Expected DisruptionAgent, got {routing_8a.invoke_agent}"
+    _ok(f"Orchestrator: {routing_8a.invoke_agent} ({routing_8a.reason})")
+
+    # ── 8b — OrchestratorAgent routes weather → DisruptionAgent ───────────
+    _section("8b — Orchestrator routes weather → DisruptionAgent")
+    ctx_8b = AgentContext(observation=obs_8a, event_type="weather")
+    routing_8b = orch_session._orchestrator.route(ctx_8b)
+    assert routing_8b.invoke_agent == "DisruptionAgent", \
+        f"Expected DisruptionAgent, got {routing_8b.invoke_agent}"
+    _ok(f"Orchestrator: {routing_8b.invoke_agent} ({routing_8b.reason})")
+
+    # ── 8c — OrchestratorAgent routes budget → BudgetAgent ────────────────
+    _section("8c — Orchestrator routes budget → BudgetAgent")
+    ctx_8c = AgentContext(observation=obs_8a, event_type="budget")
+    routing_8c = orch_session._orchestrator.route(ctx_8c)
+    assert routing_8c.invoke_agent == "BudgetAgent", \
+        f"Expected BudgetAgent, got {routing_8c.invoke_agent}"
+    _ok(f"Orchestrator: {routing_8c.invoke_agent} ({routing_8c.reason})")
+
+    # ── 8d — OrchestratorAgent routes explain → ExplanationAgent ──────────
+    _section("8d — Orchestrator routes explain → ExplanationAgent")
+    ctx_8d = AgentContext(observation=obs_8a, event_type="explain")
+    routing_8d = orch_session._orchestrator.route(ctx_8d)
+    assert routing_8d.invoke_agent == "ExplanationAgent", \
+        f"Expected ExplanationAgent, got {routing_8d.invoke_agent}"
+    _ok(f"Orchestrator: {routing_8d.invoke_agent} ({routing_8d.reason})")
+
+    # ── 8e — OrchestratorAgent returns NONE when no event ─────────────────
+    _section("8e — Orchestrator returns NONE for no actionable event")
+    obs_quiet = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.05,
+        weather_condition="clear",
+        traffic_level=0.02,
+    )
+    ctx_8e = AgentContext(observation=obs_quiet, event_type="")
+    routing_8e = orch_session._orchestrator.route(ctx_8e)
+    assert routing_8e.invoke_agent == "NONE", \
+        f"Expected NONE, got {routing_8e.invoke_agent}"
+    _ok(f"Orchestrator: {routing_8e.invoke_agent} ({routing_8e.reason})")
+
+    # ── 8f — Full pipeline: orchestrate crowd → DisruptionAgent → execute ─
+    _section("8f — Full pipeline: orchestrate crowd 90%")
+    orch_session.pending_decision = None
+    dr_8f = orch_session.orchestrate(
+        event_type="crowd",
+        crowd_level=0.90,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    assert isinstance(dr_8f, DispatchResult), "orchestrate must return DispatchResult"
+    assert dr_8f.specialist_name == "DisruptionAgent", \
+        f"Expected DisruptionAgent, got {dr_8f.specialist_name}"
+    assert dr_8f.execution_result.executed, "DisruptionAgent action must execute"
+    _ok(f"Specialist: {dr_8f.specialist_name}")
+    _ok(f"Action:     {dr_8f.action.action_type.value}")
+    _ok(f"Reasoning:  {dr_8f.action.reasoning}")
+
+    # ── 8g — Full pipeline: orchestrate weather stormy ────────────────────
+    _section("8g — Full pipeline: orchestrate weather stormy")
+    orch_session.pending_decision = None
+    dr_8g = orch_session.orchestrate(
+        event_type="weather",
+        crowd_level=0.0,
+        weather_condition="stormy",
+        traffic_level=0.0,
+    )
+    assert isinstance(dr_8g, DispatchResult)
+    assert dr_8g.specialist_name == "DisruptionAgent"
+    _ok(f"Specialist: {dr_8g.specialist_name}")
+    _ok(f"Action:     {dr_8g.action.action_type.value}")
+    _ok(f"Reasoning:  {dr_8g.action.reasoning}")
+
+    # ── 8h — Full pipeline: orchestrate explain (passive) ─────────────────
+    _section("8h — Full pipeline: orchestrate explain")
+    orch_session.pending_decision = None
+    dr_8h = orch_session.orchestrate(event_type="explain")
+    assert dr_8h.specialist_name == "ExplanationAgent"
+    assert dr_8h.action.action_type == ActionType.NO_ACTION, \
+        "ExplanationAgent must return NO_ACTION"
+    assert "ExplanationAgent" in dr_8h.action.reasoning
+    _ok(f"Specialist: {dr_8h.specialist_name}")
+    _ok(f"Explanation: {dr_8h.action.reasoning}")
+
+    # ── 8i — Full pipeline: orchestrate budget (healthy) ──────────────────
+    _section("8i — Full pipeline: orchestrate budget (healthy budget)")
+    orch_session.pending_decision = None
+    dr_8i = orch_session.orchestrate(event_type="budget")
+    assert dr_8i.specialist_name == "BudgetAgent"
+    assert dr_8i.action.action_type == ActionType.NO_ACTION, \
+        "BudgetAgent should return NO_ACTION for healthy budget"
+    _ok(f"Specialist: {dr_8i.specialist_name}")
+    _ok(f"Reasoning:  {dr_8i.action.reasoning}")
+
+    # ── 8j — DispatchResult.to_dict() serialisation ───────────────────────
+    _section("8j — DispatchResult serialisation")
+    d8 = dr_8f.to_dict()
+    assert "routing" in d8, "to_dict must contain routing"
+    assert "specialist" in d8, "to_dict must contain specialist"
+    assert "action" in d8, "to_dict must contain action"
+    assert "execution" in d8, "to_dict must contain execution"
+    _ok(f"DispatchResult keys: {list(d8.keys())}")
+
+    # ── 8k — Preference agent via orchestrate slower ──────────────────────
+    _section("8k — Full pipeline: orchestrate slower")
+    orch_session.pending_decision = None
+    dr_8k = orch_session.orchestrate(event_type="slower")
+    assert dr_8k.specialist_name == "PreferenceAgent"
+    _ok(f"Specialist: {dr_8k.specialist_name}")
+    _ok(f"Action:     {dr_8k.action.action_type.value}")
+    _ok(f"Reasoning:  {dr_8k.action.reasoning}")
+
+    # ── 8l — PlanningAgent: NO_CHANGE when no disruptions ────────────────
+    _section("8l — PlanningAgent: NO_CHANGE (0 disruptions)")
+    from modules.reoptimization.agents.planning_agent import PlanningAgent as _PA
+    _pa = _PA()
+    obs_pa_clean = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.05,
+        weather_condition="clear",
+        traffic_level=0.02,
+    )
+    ctx_pa_clean = AgentContext(observation=obs_pa_clean, event_type="plan")
+    action_8l = _pa.evaluate(ctx_pa_clean)
+    assert action_8l.action_type == ActionType.NO_ACTION, \
+        f"Expected NO_ACTION, got {action_8l.action_type}"
+    assert action_8l.parameters.get("plan_action") == "NO_CHANGE", \
+        f"Expected plan_action=NO_CHANGE, got {action_8l.parameters.get('plan_action')}"
+    assert action_8l.parameters.get("scope") == "POI", \
+        f"Expected scope=POI, got {action_8l.parameters.get('scope')}"
+    _ok(f"plan_action={action_8l.parameters['plan_action']}  scope={action_8l.parameters['scope']}")
+    _ok(f"Reasoning: {action_8l.reasoning}")
+
+    # ── 8m — PlanningAgent: FULL_PLAN when ≥3 disruptions ────────────────
+    _section("8m — PlanningAgent: FULL_PLAN (≥3 disruptions)")
+    # Temporarily inject disruption log entries so disruptions_today ≥ 3
+    _saved_log = list(orch_session.state.disruption_log)
+    for _d in range(3):
+        orch_session.state.disruption_log.append({"type": "test_disruption"})
+    obs_pa_full = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.05,
+        weather_condition="clear",
+        traffic_level=0.02,
+    )
+    ctx_pa_full = AgentContext(observation=obs_pa_full, event_type="plan")
+    action_8m = _pa.evaluate(ctx_pa_full)
+    assert action_8m.action_type == ActionType.REOPTIMIZE_DAY, \
+        f"Expected REOPTIMIZE_DAY, got {action_8m.action_type}"
+    assert action_8m.parameters.get("plan_action") == "FULL_PLAN", \
+        f"Expected plan_action=FULL_PLAN, got {action_8m.parameters.get('plan_action')}"
+    assert action_8m.parameters.get("scope") == "DAY", \
+        f"Expected scope=DAY, got {action_8m.parameters.get('scope')}"
+    _ok(f"plan_action={action_8m.parameters['plan_action']}  scope={action_8m.parameters['scope']}")
+    _ok(f"Reasoning: {action_8m.reasoning}")
+    orch_session.state.disruption_log = _saved_log   # restore
+
+    # ── 8n — PlanningAgent: REORDER on time pressure ─────────────────────
+    _section("8n — PlanningAgent: REORDER (time pressure)")
+    # Simulate time pressure: patch remaining_minutes to 45
+    obs_pa_reorder = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.05,
+        weather_condition="clear",
+        traffic_level=0.02,
+    )
+    obs_pa_reorder.remaining_minutes = 45
+    obs_pa_reorder.remaining_stops = ["Stop_A", "Stop_B", "Stop_C"]
+    ctx_pa_reorder = AgentContext(observation=obs_pa_reorder, event_type="plan")
+    action_8n = _pa.evaluate(ctx_pa_reorder)
+    assert action_8n.action_type == ActionType.RELAX_CONSTRAINT, \
+        f"Expected RELAX_CONSTRAINT, got {action_8n.action_type}"
+    assert action_8n.parameters.get("plan_action") == "REORDER", \
+        f"Expected plan_action=REORDER, got {action_8n.parameters.get('plan_action')}"
+    assert action_8n.parameters.get("scope") == "DAY", \
+        f"Expected scope=DAY, got {action_8n.parameters.get('scope')}"
+    _ok(f"plan_action={action_8n.parameters['plan_action']}  scope={action_8n.parameters['scope']}")
+    _ok(f"Reasoning: {action_8n.reasoning}")
+
+    # ── 8o — PlanningAgent: LOCAL_REPAIR with 1-2 disruptions ────────────
+    _section("8o — PlanningAgent: LOCAL_REPAIR (1-2 disruptions)")
+    obs_pa_repair = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.05,
+        weather_condition="clear",
+        traffic_level=0.02,
+    )
+    obs_pa_repair.disruptions_today = 2
+    ctx_pa_repair = AgentContext(observation=obs_pa_repair, event_type="plan")
+    action_8o = _pa.evaluate(ctx_pa_repair)
+    assert action_8o.action_type == ActionType.DEFER_POI, \
+        f"Expected DEFER_POI, got {action_8o.action_type}"
+    assert action_8o.parameters.get("plan_action") == "LOCAL_REPAIR", \
+        f"Expected plan_action=LOCAL_REPAIR, got {action_8o.parameters.get('plan_action')}"
+    assert action_8o.parameters.get("scope") == "POI", \
+        f"Expected scope=POI, got {action_8o.parameters.get('scope')}"
+    _ok(f"plan_action={action_8o.parameters['plan_action']}  scope={action_8o.parameters['scope']}")
+    _ok(f"Reasoning: {action_8o.reasoning}")
+
+    # ── 8p — PlanningAgent JSON output shape ─────────────────────────────
+    _section("8p — PlanningAgent output contains plan_action/scope/justification")
+    for _test_action in [action_8l, action_8m, action_8n, action_8o]:
+        p = _test_action.parameters
+        assert "plan_action" in p, f"Missing plan_action in {p}"
+        assert "scope" in p, f"Missing scope in {p}"
+        assert "justification" in p, f"Missing justification in {p}"
+        assert p["plan_action"] in ("FULL_PLAN", "LOCAL_REPAIR", "REORDER", "NO_CHANGE"), \
+            f"Invalid plan_action: {p['plan_action']}"
+        assert p["scope"] in ("DAY", "POI"), f"Invalid scope: {p['scope']}"
+    _ok("All PlanningAgent outputs contain plan_action / scope / justification")
+
+    # ── 8q — DisruptionAgent: LOW severity (no threshold exceeded) ────────
+    _section("8q — DisruptionAgent: LOW (no disruption)")
+    from modules.reoptimization.agents.disruption_agent import DisruptionAgent as _DA
+    _da = _DA()
+    obs_da_clean = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.05,
+        weather_condition="clear",
+        traffic_level=0.02,
+    )
+    ctx_da_clean = AgentContext(observation=obs_da_clean, event_type="crowd")
+    action_8q = _da.evaluate(ctx_da_clean)
+    assert action_8q.action_type == ActionType.NO_ACTION, \
+        f"Expected NO_ACTION, got {action_8q.action_type}"
+    assert action_8q.parameters.get("disruption_level") == "LOW", \
+        f"Expected LOW, got {action_8q.parameters.get('disruption_level')}"
+    assert action_8q.parameters.get("action") == "IGNORE", \
+        f"Expected IGNORE, got {action_8q.parameters.get('action')}"
+    _ok(f"level={action_8q.parameters['disruption_level']}  action={action_8q.parameters['action']}")
+
+    # ── 8r — DisruptionAgent: HIGH crowd → ASK_USER ──────────────────────
+    _section("8r — DisruptionAgent: HIGH crowd → ASK_USER")
+    obs_da_crowd = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.90,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    ctx_da_crowd = AgentContext(observation=obs_da_crowd, event_type="crowd")
+    action_8r = _da.evaluate(ctx_da_crowd)
+    assert action_8r.action_type == ActionType.REQUEST_USER_DECISION, \
+        f"Expected REQUEST_USER_DECISION, got {action_8r.action_type}"
+    assert action_8r.parameters.get("disruption_level") == "HIGH", \
+        f"Expected HIGH, got {action_8r.parameters.get('disruption_level')}"
+    assert action_8r.parameters.get("action") == "ASK_USER", \
+        f"Expected ASK_USER, got {action_8r.parameters.get('action')}"
+    _ok(f"level={action_8r.parameters['disruption_level']}  action={action_8r.parameters['action']}")
+    _ok(f"Reasoning: {action_8r.reasoning}")
+
+    # ── 8s — DisruptionAgent: MEDIUM weather → ASK_USER ──────────────────
+    _section("8s — DisruptionAgent: MEDIUM weather → ASK_USER")
+    obs_da_weather = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="stormy",
+        traffic_level=0.0,
+    )
+    # Patch weather to moderate (above threshold but below HC_UNSAFE 0.75)
+    obs_da_weather.weather_severity = 0.65
+    obs_da_weather.next_stop_is_outdoor = True
+    ctx_da_weather = AgentContext(observation=obs_da_weather, event_type="weather")
+    action_8s = _da.evaluate(ctx_da_weather)
+    assert action_8s.action_type == ActionType.REQUEST_USER_DECISION, \
+        f"Expected REQUEST_USER_DECISION, got {action_8s.action_type}"
+    assert action_8s.parameters.get("disruption_level") == "MEDIUM", \
+        f"Expected MEDIUM, got {action_8s.parameters.get('disruption_level')}"
+    assert action_8s.parameters.get("action") == "ASK_USER", \
+        f"Expected ASK_USER, got {action_8s.parameters.get('action')}"
+    _ok(f"level={action_8s.parameters['disruption_level']}  action={action_8s.parameters['action']}")
+
+    # ── 8t — DisruptionAgent JSON output contains disruption_level/action/confidence
+    _section("8t — DisruptionAgent JSON shape validation")
+    for _da_action in [action_8q, action_8r, action_8s]:
+        p = _da_action.parameters
+        assert "disruption_level" in p, f"Missing disruption_level in {p}"
+        assert "action" in p, f"Missing action in {p}"
+        assert "confidence" in p, f"Missing confidence in {p}"
+        assert p["disruption_level"] in ("LOW", "MEDIUM", "HIGH"), \
+            f"Invalid disruption_level: {p['disruption_level']}"
+        assert p["action"] in ("IGNORE", "ASK_USER", "DEFER", "REPLACE"), \
+            f"Invalid action: {p['action']}"
+        assert 0.0 <= p["confidence"] <= 1.0, f"confidence out of range: {p['confidence']}"
+    _ok("All DisruptionAgent outputs contain disruption_level / action / confidence")
+
+    # ── 8u — BudgetAgent: OK (healthy budget, low spend) ─────────────────
+    _section("8u — BudgetAgent: OK (healthy budget)")
+    from modules.reoptimization.agents.budget_agent import BudgetAgent as _BA
+    _ba = _BA()
+    obs_ba_ok = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    # Ensure low spend
+    obs_ba_ok.budget_spent = {"attractions": 500.0, "restaurants": 200.0}
+    ctx_ba_ok = AgentContext(observation=obs_ba_ok, event_type="budget")
+    action_8u = _ba.evaluate(ctx_ba_ok)
+    assert action_8u.action_type == ActionType.NO_ACTION, \
+        f"Expected NO_ACTION, got {action_8u.action_type}"
+    assert action_8u.parameters["budget_status"] == "OK", \
+        f"Expected OK, got {action_8u.parameters['budget_status']}"
+    assert action_8u.parameters["action"] == "NO_CHANGE", \
+        f"Expected NO_CHANGE, got {action_8u.parameters['action']}"
+    _ok(f"status={action_8u.parameters['budget_status']}  action={action_8u.parameters['action']}")
+
+    # ── 8v — BudgetAgent: OVERRUN (high spend) ───────────────────────────
+    _section("8v — BudgetAgent: OVERRUN (90%+ spend)")
+    obs_ba_over = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    # Overrun: spend 95% of total budget
+    _total = orch_session.budget.total
+    obs_ba_over.budget_spent = {"attractions": _total * 1.05}  # 105% of budget
+    ctx_ba_over = AgentContext(observation=obs_ba_over, event_type="budget")
+    action_8v = _ba.evaluate(ctx_ba_over)
+    assert action_8v.action_type == ActionType.REPLACE_POI, \
+        f"Expected REPLACE_POI, got {action_8v.action_type}"
+    assert action_8v.parameters["budget_status"] == "OVERRUN", \
+        f"Expected OVERRUN, got {action_8v.parameters['budget_status']}"
+    assert action_8v.parameters["action"] == "SUGGEST_CHEAPER", \
+        f"Expected SUGGEST_CHEAPER, got {action_8v.parameters['action']}"
+    assert action_8v.parameters["variance_percentage"] > 0, \
+        "Overrun variance must be positive"
+    _ok(f"status={action_8v.parameters['budget_status']}  action={action_8v.parameters['action']}  variance={action_8v.parameters['variance_percentage']}%")
+
+    # ── 8w — BudgetAgent: UNDERUTILIZED (low spend, high time elapsed) ───
+    _section("8w — BudgetAgent: UNDERUTILIZED (low spend, 70% time gone)")
+    obs_ba_under = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    obs_ba_under.budget_spent = {"attractions": _total * 0.10}  # Only 10%
+    obs_ba_under.remaining_minutes = 180   # 3 h left of ~11 h day
+    obs_ba_under.total_day_minutes = 660   # full day
+    ctx_ba_under = AgentContext(observation=obs_ba_under, event_type="budget")
+    action_8w = _ba.evaluate(ctx_ba_under)
+    assert action_8w.action_type == ActionType.RELAX_CONSTRAINT, \
+        f"Expected RELAX_CONSTRAINT, got {action_8w.action_type}"
+    assert action_8w.parameters["budget_status"] == "UNDERUTILIZED", \
+        f"Expected UNDERUTILIZED, got {action_8w.parameters['budget_status']}"
+    assert action_8w.parameters["action"] == "REBALANCE", \
+        f"Expected REBALANCE, got {action_8w.parameters['action']}"
+    assert action_8w.parameters["variance_percentage"] < 0, \
+        "Underutilized variance must be negative"
+    _ok(f"status={action_8w.parameters['budget_status']}  action={action_8w.parameters['action']}  variance={action_8w.parameters['variance_percentage']}%")
+
+    # ── 8x — BudgetAgent JSON shape validation ───────────────────────────
+    _section("8x — BudgetAgent JSON shape validation")
+    for _ba_action in [action_8u, action_8v, action_8w]:
+        p = _ba_action.parameters
+        assert "budget_status" in p, f"Missing budget_status in {p}"
+        assert "action" in p, f"Missing action in {p}"
+        assert "variance_percentage" in p, f"Missing variance_percentage in {p}"
+        assert p["budget_status"] in ("OK", "OVERRUN", "UNDERUTILIZED"), \
+            f"Invalid budget_status: {p['budget_status']}"
+        assert p["action"] in ("NO_CHANGE", "REBALANCE", "SUGGEST_CHEAPER"), \
+            f"Invalid action: {p['action']}"
+        assert isinstance(p["variance_percentage"], (int, float)), \
+            f"variance_percentage must be numeric: {p['variance_percentage']}"
+    _ok("All BudgetAgent outputs contain budget_status / action / variance_percentage")
+
+    # ── 8y — PreferenceAgent: nothing detected ──────────────────────────
+    _section("8y — PreferenceAgent: nothing detected")
+    from modules.reoptimization.agents.preference_agent import PreferenceAgent as _PrefA
+    _prefa = _PrefA()
+    obs_pref_none = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    obs_pref_none.avoid_crowds = False       # ensure no env_tolerance triggers
+    ctx_pref_none = AgentContext(observation=obs_pref_none, event_type="explain")
+    action_8y = _prefa.evaluate(ctx_pref_none)
+    assert action_8y.action_type == ActionType.NO_ACTION, \
+        f"Expected NO_ACTION, got {action_8y.action_type}"
+    p8y = action_8y.parameters
+    assert p8y["interests"] == [], \
+        f"Expected empty interests, got {p8y['interests']}"
+    assert p8y["pace_preference"] is None, \
+        f"Expected null pace, got {p8y['pace_preference']}"
+    assert p8y["environment_tolerance"] == {}, \
+        f"Expected empty env_tolerance, got {p8y['environment_tolerance']}"
+    _ok(f"interests={p8y['interests']}  pace={p8y['pace_preference']}  env={p8y['environment_tolerance']}")
+
+    # ── 8z — PreferenceAgent: pace change (slower) ─────────────────────
+    _section("8z — PreferenceAgent: pace change (slower)")
+    obs_pref_pace = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    obs_pref_pace.pace_preference = "fast"  # set current pace to differ
+    ctx_pref_pace = AgentContext(observation=obs_pref_pace, event_type="slower")
+    action_8z = _prefa.evaluate(ctx_pref_pace)
+    assert action_8z.action_type == ActionType.REOPTIMIZE_DAY, \
+        f"Expected REOPTIMIZE_DAY, got {action_8z.action_type}"
+    assert action_8z.parameters["pace_preference"] == "relaxed", \
+        f"Expected relaxed, got {action_8z.parameters['pace_preference']}"
+    _ok(f"pace={action_8z.parameters['pace_preference']}  action={action_8z.action_type.value}")
+
+    # ── 8A — PreferenceAgent: interests + env tolerance ────────────────
+    _section("8A — PreferenceAgent: interests + environment tolerance")
+    obs_pref_env = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="stormy",
+        traffic_level=0.75,
+    )
+    obs_pref_env.avoid_crowds = True
+    ctx_pref_env = AgentContext(
+        observation=obs_pref_env,
+        event_type="preference",
+        parameters={"interests": ["temples", "food"]},
+    )
+    action_8A = _prefa.evaluate(ctx_pref_env)
+    assert action_8A.action_type == ActionType.REOPTIMIZE_DAY, \
+        f"Expected REOPTIMIZE_DAY, got {action_8A.action_type}"
+    p8A = action_8A.parameters
+    assert p8A["interests"] == ["temples", "food"], \
+        f"Expected [temples, food], got {p8A['interests']}"
+    assert "crowd" in p8A["environment_tolerance"], \
+        "Expected crowd in env_tolerance"
+    assert "weather" in p8A["environment_tolerance"], \
+        "Expected weather in env_tolerance"
+    assert "traffic" in p8A["environment_tolerance"], \
+        "Expected traffic in env_tolerance"
+    _ok(f"interests={p8A['interests']}  env={p8A['environment_tolerance']}")
+
+    # ── 8B — PreferenceAgent JSON shape validation ──────────────────────
+    _section("8B — PreferenceAgent JSON shape validation")
+    for _pref_action in [action_8y, action_8z, action_8A]:
+        p = _pref_action.parameters
+        assert "interests" in p, f"Missing interests in {p}"
+        assert "pace_preference" in p, f"Missing pace_preference in {p}"
+        assert "environment_tolerance" in p, f"Missing environment_tolerance in {p}"
+        assert isinstance(p["interests"], list), \
+            f"interests must be list: {p['interests']}"
+        assert p["pace_preference"] in ("fast", "balanced", "relaxed", None), \
+            f"Invalid pace: {p['pace_preference']}"
+        assert isinstance(p["environment_tolerance"], dict), \
+            f"env_tolerance must be dict: {p['environment_tolerance']}"
+    _ok("All PreferenceAgent outputs contain interests / pace_preference / environment_tolerance")
+
+    # ── 8C — MemoryAgent: no disruptions → store=false ───────────────────
+    _section("8C — MemoryAgent: 0 disruptions (no store)")
+    from modules.reoptimization.agents.memory_agent import MemoryAgent as _MemA
+    _mema = _MemA()
+    obs_mem_clean = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    obs_mem_clean.disruptions_today = 0
+    ctx_mem_clean = AgentContext(observation=obs_mem_clean, event_type="memory")
+    action_8C = _mema.evaluate(ctx_mem_clean)
+    assert action_8C.action_type == ActionType.NO_ACTION, \
+        f"Expected NO_ACTION, got {action_8C.action_type}"
+    assert action_8C.parameters["store"] is False, \
+        f"Expected store=False, got {action_8C.parameters['store']}"
+    assert action_8C.parameters["memory_type"] is None, \
+        f"Expected memory_type=None, got {action_8C.parameters['memory_type']}"
+    _ok(f"store={action_8C.parameters['store']}  type={action_8C.parameters['memory_type']}")
+
+    # ── 8D — MemoryAgent: 2 disruptions → short_term ──────────────────
+    _section("8D — MemoryAgent: 2 disruptions (short_term)")
+    obs_mem_short = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    obs_mem_short.disruptions_today = 2
+    ctx_mem_short = AgentContext(observation=obs_mem_short, event_type="memory")
+    action_8D = _mema.evaluate(ctx_mem_short)
+    assert action_8D.action_type == ActionType.NO_ACTION
+    assert action_8D.parameters["store"] is True, \
+        f"Expected store=True, got {action_8D.parameters['store']}"
+    assert action_8D.parameters["memory_type"] == "short_term", \
+        f"Expected short_term, got {action_8D.parameters['memory_type']}"
+    _ok(f"store={action_8D.parameters['store']}  type={action_8D.parameters['memory_type']}")
+
+    # ── 8E — MemoryAgent: 4 disruptions → long_term ───────────────────
+    _section("8E — MemoryAgent: 4 disruptions (long_term)")
+    obs_mem_long = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+        crowd_level=0.0,
+        weather_condition="clear",
+        traffic_level=0.0,
+    )
+    obs_mem_long.disruptions_today = 4
+    ctx_mem_long = AgentContext(observation=obs_mem_long, event_type="memory")
+    action_8E = _mema.evaluate(ctx_mem_long)
+    assert action_8E.action_type == ActionType.NO_ACTION
+    assert action_8E.parameters["store"] is True, \
+        f"Expected store=True, got {action_8E.parameters['store']}"
+    assert action_8E.parameters["memory_type"] == "long_term", \
+        f"Expected long_term, got {action_8E.parameters['memory_type']}"
+    _ok(f"store={action_8E.parameters['store']}  type={action_8E.parameters['memory_type']}")
+
+    # ── 8F — MemoryAgent JSON shape validation ─────────────────────────
+    _section("8F — MemoryAgent JSON shape validation")
+    for _mem_action in [action_8C, action_8D, action_8E]:
+        p = _mem_action.parameters
+        assert "store" in p, f"Missing store in {p}"
+        assert "memory_type" in p, f"Missing memory_type in {p}"
+        assert "reason" in p, f"Missing reason in {p}"
+        assert isinstance(p["store"], bool), \
+            f"store must be bool: {p['store']}"
+        assert p["memory_type"] in ("short_term", "long_term", None), \
+            f"Invalid memory_type: {p['memory_type']}"
+        assert isinstance(p["reason"], str), \
+            f"reason must be str: {p['reason']}"
+    _ok("All MemoryAgent outputs contain store / memory_type / reason")
+
+    # ── 8G — ExplanationAgent basic explanation ────────────────────────
+    _section("8G — ExplanationAgent: basic explanation")
+    from modules.reoptimization.agents.explanation_agent import ExplanationAgent
+    _exp_agent = ExplanationAgent()
+    obs_exp_basic = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+    )
+    obs_exp_basic.remaining_minutes = 300
+    obs_exp_basic.current_time = "11:00"
+    obs_exp_basic.remaining_stops = ["Stop A", "Stop B"]
+    obs_exp_basic.next_stop_name = "Stop A"
+    obs_exp_basic.next_stop_is_outdoor = True
+    obs_exp_basic.next_stop_spti_proxy = 0.72
+    obs_exp_basic.disruptions_today = 0
+    obs_exp_basic.crowd_level = 0.0
+    obs_exp_basic.weather_condition = None
+    obs_exp_basic.weather_severity = 0.0
+    obs_exp_basic.traffic_level = 0.0
+    from modules.reoptimization.agents.base_agent import AgentContext
+    ctx_exp_basic = AgentContext(observation=obs_exp_basic, event_type="explain")
+    action_8G = _exp_agent.evaluate(ctx_exp_basic)
+    assert action_8G.action_type == ActionType.NO_ACTION, \
+        f"ExplanationAgent must return NO_ACTION, got {action_8G.action_type}"
+    assert "explanation" in action_8G.parameters, \
+        f"Missing 'explanation' key in parameters: {action_8G.parameters}"
+    expl_text = action_8G.parameters["explanation"]
+    assert isinstance(expl_text, str) and len(expl_text) > 10, \
+        f"Explanation too short: {expl_text!r}"
+    assert "Stop A" in expl_text, \
+        f"Explanation should mention next stop: {expl_text!r}"
+    _ok(f"explanation contains next stop — len={len(expl_text)}")
+
+    # ── 8H — ExplanationAgent crowd / disruption context ───────────────
+    _section("8H — ExplanationAgent: crowd + disruption context")
+    obs_exp_crowd = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+    )
+    obs_exp_crowd.remaining_minutes = 180
+    obs_exp_crowd.current_time = "14:00"
+    obs_exp_crowd.remaining_stops = ["Stop X"]
+    obs_exp_crowd.next_stop_name = "Stop X"
+    obs_exp_crowd.next_stop_is_outdoor = False
+    obs_exp_crowd.next_stop_spti_proxy = 0.55
+    obs_exp_crowd.disruptions_today = 3
+    obs_exp_crowd.crowd_level = 0.85
+    obs_exp_crowd.weather_condition = None
+    obs_exp_crowd.weather_severity = 0.0
+    obs_exp_crowd.traffic_level = 0.0
+    ctx_exp_crowd = AgentContext(observation=obs_exp_crowd, event_type="explain")
+    action_8H = _exp_agent.evaluate(ctx_exp_crowd)
+    expl_crowd = action_8H.parameters["explanation"]
+    assert "3 disruption" in expl_crowd, \
+        f"Should mention 3 disruptions: {expl_crowd!r}"
+    assert "crowd" in expl_crowd.lower() or "85%" in expl_crowd, \
+        f"Should mention crowd level: {expl_crowd!r}"
+    _ok(f"crowd + disruption context present")
+
+    # ── 8I — ExplanationAgent weather context ──────────────────────────
+    _section("8I — ExplanationAgent: weather context")
+    obs_exp_weather = orch_session._agent_controller.observe(
+        state=orch_session.state,
+        constraints=orch_session.constraints,
+        remaining_attractions=orch_session._remaining,
+        budget=orch_session.budget,
+    )
+    obs_exp_weather.remaining_minutes = 240
+    obs_exp_weather.current_time = "12:30"
+    obs_exp_weather.remaining_stops = ["Stop M", "Stop N", "Stop O"]
+    obs_exp_weather.next_stop_name = "Stop M"
+    obs_exp_weather.next_stop_is_outdoor = True
+    obs_exp_weather.next_stop_spti_proxy = 0.60
+    obs_exp_weather.disruptions_today = 1
+    obs_exp_weather.crowd_level = 0.0
+    obs_exp_weather.weather_condition = "heavy_rain"
+    obs_exp_weather.weather_severity = 0.80
+    obs_exp_weather.traffic_level = 0.50
+    ctx_exp_weather = AgentContext(observation=obs_exp_weather, event_type="explain")
+    action_8I = _exp_agent.evaluate(ctx_exp_weather)
+    expl_weather = action_8I.parameters["explanation"]
+    assert "heavy_rain" in expl_weather or "rain" in expl_weather.lower(), \
+        f"Should mention weather: {expl_weather!r}"
+    assert "traffic" in expl_weather.lower() or "50%" in expl_weather, \
+        f"Should mention traffic: {expl_weather!r}"
+    _ok(f"weather + traffic context present")
+
+    # ── 8J — ExplanationAgent JSON shape validation ────────────────────
+    _section("8J — ExplanationAgent JSON shape validation")
+    for _exp_act in [action_8G, action_8H, action_8I]:
+        p = _exp_act.parameters
+        assert "explanation" in p, f"Missing 'explanation' in {p}"
+        assert isinstance(p["explanation"], str), \
+            f"explanation must be str: {p['explanation']}"
+        assert len(p["explanation"]) > 0, "explanation must not be empty"
+    _ok("All ExplanationAgent outputs contain valid 'explanation' string")
+
+    _ok("All Part 8 assertions passed ✓")
 
     # =========================================================================
     # FINAL SUMMARY

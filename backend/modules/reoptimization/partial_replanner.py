@@ -24,7 +24,11 @@ from modules.tool_usage.distance_tool import DistanceTool
 from modules.tool_usage.time_tool import TimeTool
 from modules.planning.route_planner import RoutePlanner, DEFAULT_DAY_END
 from modules.reoptimization.trip_state import TripState
+from modules.observability.logger import StructuredLogger
 import config
+import time as _time_mod
+
+_perf_logger = StructuredLogger()
 
 
 class PartialReplanner:
@@ -58,6 +62,28 @@ class PartialReplanner:
     ) -> DayPlan:
         """
         Generate a new DayPlan for the rest of today from current position.
+        """
+        _t0 = _time_mod.perf_counter()
+        result = self._replan_inner(
+            state, remaining_attractions, constraints,
+            day_end_time, deprioritize_outdoor,
+        )
+        _perf_logger.log("default", "PERFORMANCE", {
+            "component": "PartialReplanner.replan",
+            "duration_ms": round((_time_mod.perf_counter() - _t0) * 1000, 2),
+        })
+        return result
+
+    def _replan_inner(
+        self,
+        state: TripState,
+        remaining_attractions: list[AttractionRecord],
+        constraints: ConstraintBundle,
+        day_end_time: str = "20:00",
+        deprioritize_outdoor: bool = False,
+    ) -> DayPlan:
+        """
+        Internal implementation of replan().
 
         Args:
             state:                  Live TripState (position, time, visited).
@@ -110,12 +136,6 @@ class PartialReplanner:
             ftrm_params=adjusted_params,
         )
 
-        # ── 4. Derive context ─────────────────────────────────────────────────
-        trip_month   = state.current_day_date.month
-        group_size   = (constraints.hard.group_size
-                        or constraints.hard.total_travelers or 1)
-        traveler_ages = constraints.hard.traveler_ages
-
         # ── 5. Delegate to _plan_single_day from current position ─────────────
         new_plan = planner._plan_single_day(
             day_number=state.current_day,
@@ -124,9 +144,6 @@ class PartialReplanner:
             start_lat=state.current_lat,         # ← current position, not hotel
             start_lon=state.current_lon,
             constraints=constraints,
-            trip_month=trip_month,
-            group_size=group_size,
-            traveler_ages=traveler_ages,
             is_arrival_or_departure_day=False,   # mid-trip replan: no boundary penalty
         )
 
