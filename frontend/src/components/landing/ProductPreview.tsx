@@ -2,7 +2,7 @@
 
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
-import { Layout, CheckCircle, Clock } from "lucide-react";
+import { CheckCircle, Clock } from "lucide-react";
 
 export default function ProductPreview() {
     const ref = useRef(null);
@@ -37,9 +37,7 @@ export default function ProductPreview() {
                         {/* Sidebar */}
                         <div className="absolute left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 p-4 flex flex-col gap-4">
                             <div className="flex items-center gap-2 mb-6 px-2">
-                                <div className="w-6 h-6 bg-primary-600 rounded-md flex items-center justify-center">
-                                    <Layout className="w-3 h-3 text-white" />
-                                </div>
+                                <img src="/pinwheel.png" alt="NexStep Logo" className="w-6 h-6 object-contain" />
                                 <span className="font-bold text-gray-900">NexStep</span>
                             </div>
                             <div className="h-8 w-full bg-primary-50 text-primary-700 rounded-md flex items-center px-3 text-sm font-medium">Dashboard</div>

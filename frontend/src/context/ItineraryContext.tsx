@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { toast } from "sonner";
 
 export interface Activity {
     id: number;
@@ -48,6 +49,7 @@ export interface Itinerary {
     itineraryDays?: Day[]; // The full schedule
     agentName?: string;
     agentPhone?: string;
+    issueSummary?: string;
 }
 
 export interface Flight {
@@ -77,10 +79,13 @@ interface ItineraryContextType {
     itineraries: Itinerary[];
     isLoading: boolean;
     addItinerary: (itinerary: Omit<Itinerary, 'id'>) => Promise<void>;
+    updateActivity: (activityId: number, updates: Partial<Activity>) => Promise<void>;
     updateItinerary: (id: number, itinerary: Partial<Itinerary>) => Promise<void>;
     deleteItinerary: (id: number) => Promise<void>;
     getItinerary: (id: number) => Itinerary | undefined;
     refreshItineraries: () => Promise<void>;
+    searchQuery: string;
+    setSearchQuery: (query: string) => void;
 }
 
 const ItineraryContext = createContext<ItineraryContextType | undefined>(undefined);
@@ -88,6 +93,7 @@ const ItineraryContext = createContext<ItineraryContextType | undefined>(undefin
 export function ItineraryProvider({ children }: { children: ReactNode }) {
     const [itineraries, setItineraries] = useState<Itinerary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const fetchItineraries = async () => {
         setIsLoading(true);
@@ -97,8 +103,8 @@ export function ItineraryProvider({ children }: { children: ReactNode }) {
                 const data = await response.json();
 
                 // Auto-transition 'Upcoming' to 'Active' if start date is reached
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
                 const updatedData = await Promise.all(data.map(async (itinerary: Itinerary) => {
                     if (itinerary.status === 'Upcoming' && itinerary.flights && itinerary.flights.length > 0) {
@@ -108,10 +114,11 @@ export function ItineraryProvider({ children }: { children: ReactNode }) {
                         const departureFlight = itinerary.flights.find(f => f.type === 'Departure');
                         if (departureFlight && departureFlight.date) {
                             startDate = new Date(departureFlight.date);
+                            startDate.setHours(0, 0, 0, 0);
                         }
 
                         if (startDate && startDate <= today) {
-                            console.log(`Auto-activating itinerary ${itinerary.id}`);
+                            console.log(`Auto-activating itinerary ${itinerary.id} - Start: ${startDate}, Today: ${today}`);
                             // Optimistic update locally
                             itinerary.status = 'Active';
 
@@ -123,6 +130,76 @@ export function ItineraryProvider({ children }: { children: ReactNode }) {
                             });
                         }
                     }
+
+                    // Add Active/Disrupted → Completed transition logic
+                    if ((itinerary.status === 'Active' || itinerary.status === 'Disrupted')) {
+                        let shouldComplete = false;
+
+                        // Check if all activities are completed (based on time)
+                        if (itinerary.itineraryDays && itinerary.itineraryDays.length > 0) {
+                            const allActivities = itinerary.itineraryDays.flatMap(day => day.activities || []);
+                            
+                            if (allActivities.length > 0) {
+                                // Get the last activity's end time
+                                const lastDay = itinerary.itineraryDays[itinerary.itineraryDays.length - 1];
+                                const lastActivity = lastDay.activities?.[lastDay.activities.length - 1];
+                                
+                                if (lastActivity && lastActivity.time) {
+                                    // Calculate when the last activity ends (start time + 2 hours)
+                                    const startDateRaw = itinerary.flights?.find((f: any) => f.type === 'Departure')?.date || new Date().toISOString();
+                                    const startDate = new Date(startDateRaw);
+                                    const lastActivityDate = new Date(startDate);
+                                    lastActivityDate.setDate(lastActivityDate.getDate() + (lastDay.dayNumber - 1));
+                                    
+                                    const timeParts = lastActivity.time.split(':');
+                                    if (timeParts.length === 2) {
+                                        lastActivityDate.setHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), 0, 0);
+                                    }
+                                    
+                                    // Add 2 hours for last activity duration
+                                    const lastActivityEndTime = new Date(lastActivityDate.getTime() + (2 * 60 * 60 * 1000));
+                                    
+                                    // If last activity has ended, complete the itinerary
+                                    if (now >= lastActivityEndTime) {
+                                        shouldComplete = true;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Fallback: check return flight date
+                        if (!shouldComplete && itinerary.flights && itinerary.flights.length > 0) {
+                            const returnFlight = itinerary.flights.find(f => f.type === 'Return');
+                            if (returnFlight && returnFlight.date) {
+                                const endDate = new Date(returnFlight.date);
+                                endDate.setHours(23, 59, 59, 999); // End of return flight day
+                                
+                                if (now >= endDate) {
+                                    shouldComplete = true;
+                                }
+                            }
+                        }
+
+                        if (shouldComplete) {
+                            console.log(`Auto-completing itinerary ${itinerary.id}`);
+                            // Optimistic update locally
+                            itinerary.status = 'Completed';
+
+                            // Show completion notification
+                            toast.success(`Trip Completed: ${itinerary.c}`, {
+                                description: `The trip to ${itinerary.d} has been completed.`,
+                                duration: 5000,
+                            });
+
+                            // Fire and forget update to server
+                            fetch(`/api/itineraries/${itinerary.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'Completed' })
+                            });
+                        }
+                    }
+
                     return itinerary;
                 }));
 
@@ -139,6 +216,13 @@ export function ItineraryProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         fetchItineraries();
+        
+        // Set up periodic refresh every 60 seconds to catch status transitions
+        const intervalId = setInterval(() => {
+            fetchItineraries();
+        }, 60000); // 60 seconds
+        
+        return () => clearInterval(intervalId);
     }, []);
 
     const addItinerary = async (newItinerary: Omit<Itinerary, 'id'>) => {
@@ -203,8 +287,31 @@ export function ItineraryProvider({ children }: { children: ReactNode }) {
         return itineraries.find(i => i.id === id);
     };
 
+    const updateActivity = async (activityId: number, updates: Partial<Activity>) => {
+        try {
+            const response = await fetch(`/api/activities/${activityId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updates),
+            });
+
+            if (response.ok) {
+                // Refresh itineraries to get updated activity
+                await fetchItineraries();
+            } else {
+                console.error('Failed to update activity');
+            }
+        } catch (error) {
+            console.error('Error updating activity:', error);
+        }
+    };
+
     return (
-        <ItineraryContext.Provider value={{ itineraries, isLoading, addItinerary, updateItinerary, deleteItinerary, getItinerary, refreshItineraries: fetchItineraries }}>
+        <ItineraryContext.Provider value={{
+            itineraries, isLoading, addItinerary, updateItinerary, deleteItinerary, getItinerary, updateActivity, refreshItineraries: fetchItineraries, searchQuery, setSearchQuery
+        }}>
             {children}
         </ItineraryContext.Provider>
     );

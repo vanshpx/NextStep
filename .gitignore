@@ -1,21 +1,27 @@
-# Python bytecode
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyc
-*.pyo
-
-# Virtual environment
-.venv/
-venv/
-env/
-
-# Environment variables
+*.so
 .env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# IDE
-.vscode/
-.idea/
+# Node
+node_modules/
+dist/
+.DS_Store
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # OS
 .DS_Store

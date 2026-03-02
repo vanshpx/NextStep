@@ -28,6 +28,9 @@ interface TravelDetailsProps {
 }
 
 export default function TravelDetails({ departure, returnTrip, onChange, disabledDeparture = false, disabledReturn = false }: TravelDetailsProps) {
+    // Get today's date in YYYY-MM-DD format for min date validation
+    const today = new Date().toISOString().split('T')[0];
+    
     return (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -67,6 +70,7 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                             value={departure.date ?? ""}
                             onChange={(e) => onChange('departure', 'date', e.target.value)}
                             disabled={disabledDeparture}
+                            min={today}
                         />
                     </div>
 
@@ -137,6 +141,7 @@ export default function TravelDetails({ departure, returnTrip, onChange, disable
                             value={returnTrip.date ?? ""}
                             onChange={(e) => onChange('return', 'date', e.target.value)}
                             disabled={disabledReturn}
+                            min={departure.date || today}
                         />
                     </div>
 

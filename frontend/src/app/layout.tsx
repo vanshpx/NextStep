@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "./globals.css";
 import { ItineraryProvider } from "@/context/ItineraryContext";
+import { Toaster } from "sonner";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -25,6 +26,7 @@ export default function RootLayout({
         <ItineraryProvider>
           {children}
         </ItineraryProvider>
+        <Toaster position="top-right" />
       </body>
     </html>
   );

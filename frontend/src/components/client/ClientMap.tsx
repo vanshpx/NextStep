@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { GoogleMap, Marker, OverlayView } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/lib/googleMaps";
+import { useGlobalTime } from "@/hooks/useGlobalTime";
 
 interface Activity {
     id: number;
@@ -12,19 +13,21 @@ interface Activity {
     status?: string;
     lat?: number;
     lng?: number;
+    startTime?: string;
+    endTime?: string;
 }
 
 interface ClientMapProps {
     activities: Activity[];
     flights?: unknown[];
     selectedActivity: Activity | null;
+    isDisrupted?: boolean;
 }
 
 const mapContainerStyle = { width: "100%", height: "100%" };
 
 // ─── SVG Marker Factories ──────────────────────────────────────────────────
-
-function buildIcon(type: "completed" | "current" | "upcoming") {
+function buildIcon(type: "completed" | "current" | "upcoming", isDisrupted: boolean = false) {
     let svg: string;
     let size: number;
 
@@ -36,8 +39,9 @@ function buildIcon(type: "completed" | "current" | "upcoming") {
 </svg>`;
         size = 28;
     } else if (type === "current") {
+        const color = isDisrupted ? "#ef4444" : "#3b82f6";
         svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-  <circle cx="14" cy="14" r="13" fill="#3b82f6" stroke="white" stroke-width="2"/>
+  <circle cx="14" cy="14" r="13" fill="${color}" stroke="white" stroke-width="2"/>
   <circle cx="14" cy="14" r="5" fill="white"/>
 </svg>`;
         size = 28;
@@ -61,8 +65,9 @@ function buildIcon(type: "completed" | "current" | "upcoming") {
 }
 
 // ─── Pulse Ring ────────────────────────────────────────────────────────────
-
-function PulseRing({ position }: { position: google.maps.LatLngLiteral }) {
+function PulseRing({ position, isDisrupted }: { position: google.maps.LatLngLiteral; isDisrupted: boolean }) {
+    const color = isDisrupted ? "rgba(239,68,68,0.3)" : "rgba(59,130,246,0.2)";
+    const animationName = isDisrupted ? "pulse-ring-red" : "pulse-ring";
     return (
         <OverlayView position={position} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
             <div style={{
@@ -70,8 +75,8 @@ function PulseRing({ position }: { position: google.maps.LatLngLiteral }) {
                 transform: "translate(-50%, -50%)",
                 width: 44, height: 44,
                 borderRadius: "50%",
-                background: "rgba(59,130,246,0.2)",
-                animation: "pulse-ring 1.6s ease-out infinite",
+                background: color,
+                animation: `${animationName} 1.6s ease-out infinite`,
                 pointerEvents: "none",
             }} />
         </OverlayView>
@@ -173,24 +178,54 @@ function ActivityPopup({ data, onClose }: { data: PopupData; onClose: () => void
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────
-
-export default function ClientMap({ activities = [], selectedActivity }: ClientMapProps) {
+export default function ClientMap({ activities = [], selectedActivity, isDisrupted = false }: ClientMapProps) {
     const { isLoaded, loadError } = useGoogleMaps();
     const [map, setMap] = useState<google.maps.Map | null>(null);
     const [popup, setPopup] = useState<PopupData | null>(null);
+    const now = useGlobalTime();
 
     const validActivities = useMemo(
         () => activities.filter((a) => a.lat != null && a.lng != null),
         [activities]
     );
 
+    // Calculate current activity based on time, not status field
     const currentActivityId = useMemo(() => {
-        const completedIds = new Set(
-            activities.filter((a) => a.status === "completed").map((a) => a.id)
-        );
-        if (completedIds.size === 0 || completedIds.size === activities.length) return null;
-        return activities.find((a) => !completedIds.has(a.id))?.id ?? null;
-    }, [activities]);
+        if (validActivities.length === 0) return null;
+
+        // Find the first activity that hasn't ended yet
+        for (const activity of validActivities) {
+            if (!activity.startTime || !activity.endTime) continue;
+            
+            const endTime = new Date(activity.endTime).getTime();
+            
+            // If this activity hasn't ended yet, it's the current one
+            if (now < endTime) {
+                return activity.id;
+            }
+        }
+
+        // All activities completed
+        return null;
+    }, [validActivities, now]);
+
+    // Determine completed activities based on time
+    const completedActivityIds = useMemo(() => {
+        const completed = new Set<number>();
+        
+        validActivities.forEach((activity) => {
+            if (!activity.startTime || !activity.endTime) return;
+            
+            const endTime = new Date(activity.endTime).getTime();
+            
+            // If activity has ended, mark as completed
+            if (now >= endTime) {
+                completed.add(activity.id);
+            }
+        });
+        
+        return completed;
+    }, [validActivities, now]);
 
     const onLoad = useCallback((m: google.maps.Map) => setMap(m), []);
 
@@ -234,6 +269,10 @@ export default function ClientMap({ activities = [], selectedActivity }: ClientM
                     0%   { transform: translate(-50%,-50%) scale(0.6); opacity: 1; }
                     100% { transform: translate(-50%,-50%) scale(1.8); opacity: 0; }
                 }
+                @keyframes pulse-ring-red {
+                    0%   { transform: translate(-50%,-50%) scale(0.6); opacity: 1; }
+                    100% { transform: translate(-50%,-50%) scale(1.8); opacity: 0; }
+                }
             `}</style>
 
             <GoogleMap
@@ -259,16 +298,33 @@ export default function ClientMap({ activities = [], selectedActivity }: ClientM
                 {/* Activity Markers */}
                 {validActivities.map((activity) => {
                     const isCurrent = activity.id === currentActivityId;
-                    const isCompleted = activity.status === "completed";
-                    const iconType = isCompleted ? "completed" : isCurrent ? "current" : "upcoming";
+                    const isCompleted = completedActivityIds.has(activity.id);
+                    const isActivityDisrupted = activity.status === "issue";
+                    
+                    // If activity is disrupted and completed, show red completed marker
+                    // If activity is disrupted and current, show red current marker
+                    // Otherwise, normal markers
+                    let iconType: "completed" | "current" | "upcoming";
+                    let showAsDisrupted = false;
+                    
+                    if (isCompleted) {
+                        iconType = "completed";
+                        // Don't show disrupted styling for completed activities - they're done
+                    } else if (isCurrent) {
+                        iconType = "current";
+                        showAsDisrupted = isActivityDisrupted || isDisrupted;
+                    } else {
+                        iconType = "upcoming";
+                    }
+                    
                     const pos = { lat: activity.lat!, lng: activity.lng! };
 
                     return (
                         <React.Fragment key={`act-${activity.id}`}>
-                            {isCurrent && <PulseRing position={pos} />}
+                            {isCurrent && <PulseRing position={pos} isDisrupted={showAsDisrupted} />}
                             <Marker
                                 position={pos}
-                                icon={buildIcon(iconType)}
+                                icon={buildIcon(iconType, showAsDisrupted)}
                                 zIndex={isCurrent ? 10 : isCompleted ? 5 : 1}
                                 onClick={() => setPopup({ activity, position: pos })}
                             />

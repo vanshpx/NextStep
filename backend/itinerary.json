@@ -1,0 +1,65 @@
+[
+    {
+        "id": "t1",
+        "description": "Morning Coffee",
+        "start_time": "2026-05-20T09:00:00",
+        "end_time": "2026-05-20T10:00:00",
+        "location": "Cafe Central",
+        "type": "rest",
+        "status": "PENDING"
+    },
+    {
+        "id": "t2",
+        "description": "Team Meeting",
+        "start_time": "2026-05-20T10:30:00",
+        "end_time": "2026-05-20T12:00:00",
+        "location": "Office",
+        "type": "work",
+        "status": "PENDING"
+    },
+    {
+        "id": "t3",
+        "description": "Lunch with Client",
+        "start_time": "2026-05-20T12:30:00",
+        "end_time": "2026-05-20T14:00:00",
+        "location": "Bistro",
+        "type": "social",
+        "status": "PENDING"
+    },
+    {
+        "id": "t4",
+        "description": "City Museum Visit",
+        "start_time": "2026-05-20T14:30:00",
+        "end_time": "2026-05-20T16:30:00",
+        "location": "Museum",
+        "type": "walking",
+        "status": "PENDING"
+    },
+    {
+        "id": "t5",
+        "description": "Evening Coffee Break",
+        "start_time": "2026-05-20T17:00:00",
+        "end_time": "2026-05-20T17:30:00",
+        "location": "Cafe Corner",
+        "type": "rest",
+        "status": "PENDING"
+    },
+    {
+        "id": "t6",
+        "description": "Dinner Reservation",
+        "start_time": "2026-05-20T18:30:00",
+        "end_time": "2026-05-20T20:00:00",
+        "location": "Italian Restaurant",
+        "type": "fixed",
+        "status": "PENDING"
+    },
+    {
+        "id": "t7",
+        "description": "Night Walk",
+        "start_time": "2026-05-20T20:30:00",
+        "end_time": "2026-05-20T21:30:00",
+        "location": "Riverfront",
+        "type": "walking",
+        "status": "PENDING"
+    }
+]

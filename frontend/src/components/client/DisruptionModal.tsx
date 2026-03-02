@@ -3,6 +3,8 @@
 import { X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
+import { summarizeIssue } from "@/lib/ai";
 
 interface DisruptionModalProps {
     isOpen: boolean;
@@ -12,6 +14,33 @@ interface DisruptionModalProps {
 }
 
 export default function DisruptionModal({ isOpen, onClose, onSubmit, activityTitle }: DisruptionModalProps) {
+    const [selectedType, setSelectedType] = useState('Delay');
+    const [description, setDescription] = useState('');
+    const [summary, setSummary] = useState('');
+    const [isSummarizing, setIsSummarizing] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const timeoutId = setTimeout(async () => {
+            if (description.trim().length > 5) {
+                setIsSummarizing(true);
+                try {
+                    const res = await summarizeIssue(selectedType, description);
+                    setSummary(res);
+                } catch (err) {
+                    console.error("Summarization failed", err);
+                } finally {
+                    setIsSummarizing(false);
+                }
+            } else {
+                setSummary(selectedType);
+            }
+        }, 800);
+
+        return () => clearTimeout(timeoutId);
+    }, [description, selectedType, isOpen]);
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -41,11 +70,17 @@ export default function DisruptionModal({ isOpen, onClose, onSubmit, activityTit
 
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Issue Type</label>
-                                <select className="w-full h-10 px-3 rounded-md bg-white border border-gray-300 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                                <select
+                                    value={selectedType}
+                                    onChange={(e) => setSelectedType(e.target.value)}
+                                    className="w-full h-10 px-3 rounded-md bg-white border border-gray-300 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                >
                                     <option>Delay</option>
-                                    <option>Cancellation</option>
-                                    <option>Missed Connection</option>
-                                    <option>Lost Item</option>
+                                    <option>Want to skip</option>
+                                    <option>Do it later</option>
+                                    <option>Bad weather</option>
+                                    <option>Fatigue</option>
+                                    <option>Flight missed</option>
                                     <option>Other</option>
                                 </select>
                             </div>
@@ -53,8 +88,10 @@ export default function DisruptionModal({ isOpen, onClose, onSubmit, activityTit
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Description</label>
                                 <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
                                     className="w-full h-24 p-3 rounded-md bg-white border border-gray-300 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                                    placeholder="Please maintain details about the incident..."
+                                    placeholder="e.g. Flight is delayed by 2 hours because of air traffic at JFK..."
                                 />
                             </div>
 
@@ -64,10 +101,10 @@ export default function DisruptionModal({ isOpen, onClose, onSubmit, activityTit
                                 </Button>
                                 <Button
                                     onClick={() => {
-                                        onSubmit('Expected Delay', 'Traffic'); // Example values, actual implementation would get these from state
+                                        onSubmit(summary || selectedType, description);
                                         onClose();
                                     }}
-                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-200"
+                                    className="flex-1 bg-primary-600 hover:bg-primary-700 text-white"
                                 >
                                     Submit Report
                                 </Button>

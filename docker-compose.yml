@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 version: "3.8"
 
 # Travel Itinerary Optimizer — Local Development Stack
@@ -65,3 +66,30 @@ volumes:
     driver: local
   redis_data:
     driver: local
+=======
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://backend:8000
+>>>>>>> 520faf418dc8e29b74589419c7888046bcf1e4c9

@@ -41,6 +41,7 @@ export async function GET() {
             from: it.from,
             to: it.to,
             totalDays: it.totalDays,
+            issueSummary: it.issueSummary,
             flights: it.flights,
             hotelStays: it.hotelStays,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
         const {
             c, d, s, date,
             flights, hotelStays, itineraryDays,
-            age, days, email, mobile, origin, from, to, totalDays,
+            age, days, email, mobile, origin, from, to, totalDays, issueSummary,
             displayPrice // eslint-disable-line @typescript-eslint/no-unused-vars
         } = body;
 
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
                 // Detailed fields
                 age: age?.toString(),
                 days: days?.toString(),
-                email, mobile, origin, from, to, totalDays,
+                email, mobile, origin, from, to, totalDays, issueSummary,
 
                 flights: {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any

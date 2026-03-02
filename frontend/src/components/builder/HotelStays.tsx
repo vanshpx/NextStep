@@ -25,6 +25,9 @@ interface HotelStaysProps {
 
 export default function HotelStays({ stays, onChange }: HotelStaysProps) {
     const [expandedId, setExpandedId] = useState<number | null>(stays[0]?.id || null);
+    
+    // Get today's date in YYYY-MM-DD format for min date validation
+    const today = new Date().toISOString().split('T')[0];
 
     const addStay = () => {
         const newId = Date.now() + Math.floor(Math.random() * 10000);
@@ -130,12 +133,14 @@ export default function HotelStays({ stays, onChange }: HotelStaysProps) {
                                             type="date"
                                             value={stay.checkIn}
                                             onChange={(e) => updateStay(stay.id, 'checkIn', e.target.value)}
+                                            min={today}
                                         />
                                         <Input
                                             label="Check-out Date"
                                             type="date"
                                             value={stay.checkOut}
                                             onChange={(e) => updateStay(stay.id, 'checkOut', e.target.value)}
+                                            min={stay.checkIn || today}
                                         />
                                     </div>
 

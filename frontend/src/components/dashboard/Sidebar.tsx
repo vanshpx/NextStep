@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Map, PlusCircle, LogOut, Layout } from "lucide-react";
+import { Home, Map, PlusCircle, LogOut } from "lucide-react";
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
@@ -22,10 +22,8 @@ export default function Sidebar() {
         >
             {/* Logo */}
             <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid var(--sidebar-border)", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 28, height: 28, background: "var(--brand)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <Layout style={{ width: 15, height: 15, color: "#fff" }} />
-                </div>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>NexStep</span>
+                <img src="/pinwheel.png" alt="NexStep Logo" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
+                <span style={{ fontSize: 17, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>NexStep</span>
             </div>
 
             {/* Navigation */}

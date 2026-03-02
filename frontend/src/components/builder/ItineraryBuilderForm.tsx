@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useItinerary, Itinerary } from "@/context/ItineraryContext";
+import { toast } from "sonner";
 
 import ClientDetailsForm from "@/components/builder/ClientDetailsForm";
 import TravelDetails from "@/components/builder/TravelDetails";
@@ -66,10 +67,10 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             const ret = initialData.flights.find((f: any) => f.type === 'Return');
             setTravelDetails({
                 departure: dep
-                    ? { ...dep, date: dep.date ? new Date(dep.date).toISOString().split('T')[0] : "" }
+                    ? { ...dep, departureTime: dep.flightTime || (dep as any).departureTime, date: dep.date ? new Date(dep.date).toISOString().split('T')[0] : "" }
                     : { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" },
                 returnTrip: ret
-                    ? { ...ret, date: ret.date ? new Date(ret.date).toISOString().split('T')[0] : "" }
+                    ? { ...ret, departureTime: ret.flightTime || (ret as any).departureTime, date: ret.date ? new Date(ret.date).toISOString().split('T')[0] : "" }
                     : { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" }
             });
         } else {
@@ -134,8 +135,8 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const ret = initialData.flights.find((f: any) => f.type === 'Return');
                 return {
-                    departure: dep ? { ...dep, date: dep.date ? new Date(dep.date).toISOString().split('T')[0] : "" } : { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" },
-                    returnTrip: ret ? { ...ret, date: ret.date ? new Date(ret.date).toISOString().split('T')[0] : "" } : { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" }
+                    departure: dep ? { ...dep, departureTime: dep.flightTime || (dep as any).departureTime, date: dep.date ? new Date(dep.date).toISOString().split('T')[0] : "" } : { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" },
+                    returnTrip: ret ? { ...ret, departureTime: ret.flightTime || (ret as any).departureTime, date: ret.date ? new Date(ret.date).toISOString().split('T')[0] : "" } : { date: "", airport: "", airline: "", flightNumber: "", departureTime: "", arrivalTime: "" }
                 };
             }
         }
@@ -191,6 +192,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
     const isCompleted = initialData?.status === 'Completed';
     const isActive = initialData?.status === 'Active';
     const isUpcoming = initialData?.status === 'Upcoming';
+    const isDisrupted = initialData?.status === 'Disrupted';
 
     // Conditional Logic for "Middle Stage"
     const isDeparturePassed = isActive || (() => {
@@ -246,41 +248,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
 
             const newDays = [...days];
 
-            // 1. Arrival Logic (Day 1)
-            // Use arrivalAirport if available, otherwise fallback to airport (origin) which is wrong but fallback
-            const targetAirport = updated.departure.arrivalAirport || updated.departure.airport;
-            const targetLat = updated.departure.arrivalLat ?? updated.departure.lat;
-            const targetLng = updated.departure.arrivalLng ?? updated.departure.lng;
-
-            if (targetAirport && updated.departure.arrivalTime) {
-                const day1 = newDays[0];
-                if (day1) {
-                    const hasArrival = day1.activities.some(a => a.title.startsWith("Arrival at"));
-                    if (!hasArrival) {
-                        day1.activities.unshift({
-                            id: Date.now() + Math.floor(Math.random() * 1000),
-                            time: updated.departure.arrivalTime,
-                            duration: 0.5,
-                            title: `Arrival at ${targetAirport}`,
-                            location: targetAirport,
-                            notes: `Flight: ${updated.departure.airline} ${updated.departure.flightNumber}`,
-                            lat: targetLat,
-                            lng: targetLng,
-                            status: 'upcoming'
-                        });
-
-                        day1.activities.splice(1, 0, {
-                            id: Date.now() + Math.floor(Math.random() * 1000) + 1,
-                            time: addMinutes(updated.departure.arrivalTime, 30),
-                            duration: 1,
-                            title: "Transfer to Hotel",
-                            location: "Hotel",
-                            notes: "Private Transfer arranged",
-                            status: 'upcoming'
-                        });
-                    }
-                }
-            }
+            // 1. Arrival Logic (Day 1) removed as per user request
 
             // 2. Departure Logic (Last Day)
             if (updated.returnTrip.airport && updated.returnTrip.departureTime) {
@@ -407,6 +375,9 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
             to: clientDetails.destination || travelDetails.returnTrip.airport,
             totalDays: clientDetails.days ? parseInt(clientDetails.days) : undefined,
 
+            // Clear issueSummary when finalizing a disrupted itinerary
+            issueSummary: (isEditing && initialData?.status === 'Disrupted') ? null : initialData?.issueSummary,
+
             // New Relations
             flights: flights,
             hotelStays: stays,
@@ -417,29 +388,42 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
 
             itineraryDays: days.map((day, index) => ({
                 dayNumber: index + 1,
-                activities: day.activities.map(act => ({
-                    time: act.time,
-                    duration: act.duration,
-                    title: act.title,
-                    location: act.location,
-                    notes: act.notes,
-                    status: act.status || 'upcoming',
-                    lat: act.lat,
-                    lng: act.lng
-                }))
+                activities: day.activities.map(act => {
+                    // When finalizing a disrupted itinerary, clear the 'issue' status and disruption notes
+                    const shouldClearDisruption = isEditing && initialData?.status === 'Disrupted' && act.status === 'issue';
+                    
+                    return {
+                        time: act.time,
+                        duration: act.duration,
+                        title: act.title,
+                        location: act.location,
+                        notes: shouldClearDisruption ? '' : act.notes,
+                        status: shouldClearDisruption ? 'upcoming' : (act.status || 'upcoming'),
+                        lat: act.lat,
+                        lng: act.lng
+                    };
+                })
             }))
         };
 
         try {
             if (isEditing && initialData) {
                 await updateItinerary(initialData.id, newItinerary);
+                
+                // Show success message with special note if clearing disruption
+                if (initialData.status === 'Disrupted' && finalStatus === 'Active') {
+                    toast.success('Itinerary updated! Disruption cleared. Refresh the client view to see changes.');
+                } else {
+                    toast.success('Itinerary updated successfully!');
+                }
             } else {
                 await addItinerary(newItinerary);
+                toast.success('Itinerary created successfully!');
             }
             router.push('/dashboard');
         } catch (error) {
             console.error("Failed to save itinerary", error);
-            alert("Failed to save itinerary");
+            toast.error("Failed to save itinerary. Please try again.");
         }
     };
 
@@ -456,7 +440,7 @@ export default function ItineraryBuilderForm({ initialData, isEditing = false }:
                 <h1 className="text-3xl font-bold text-gray-900">{isEditing ? 'Edit Itinerary' : 'Create New Itinerary'}</h1>
                 <div className="flex gap-4">
                     {/* Draft: Save Draft + Finalize. Upcoming: Update only. Active/Completed: handled below. */}
-                    {!isActive && !isUpcoming && !isCompleted && (
+                    {!isActive && !isUpcoming && !isCompleted && !isDisrupted && (
                         <Button variant="outline" onClick={() => handleSave('Draft')}>
                             <Save className="w-4 h-4 mr-2" />
                             Save Draft

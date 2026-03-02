@@ -10,13 +10,32 @@ async function main() {
     await prisma.hotelStay.deleteMany();
     await prisma.itinerary.deleteMany();
 
-    // ─── 1. Rahul Verma — Goa (Active) ─────────────────────────────────────────
+    // Get today's date for dynamic date generation
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Helper function to format date as YYYY-MM-DD
+    const formatDate = (date: Date) => {
+        return date.toISOString().split('T')[0];
+    };
+
+    // Helper function to format date range as "Mon DD - Mon DD"
+    const formatDateRange = (startDate: Date, endDate: Date) => {
+        const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+        return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}`;
+    };
+
+    // ─── 1. Rahul Verma — Goa (Active - Started 4 days ago, ends today) ─────────────────────────────────────────
+    const rahulStart = new Date(today);
+    rahulStart.setDate(today.getDate() - 4);
+    const rahulEnd = new Date(today);
+    
     await prisma.itinerary.create({
         data: {
             client: 'Rahul Verma',
             destination: 'Goa, India',
-            dateRange: 'Feb 20 - Feb 24',
-            status: 'Active',
+            dateRange: formatDateRange(rahulStart, rahulEnd),
+            status: 'Upcoming', // Will auto-transition to Active
             age: '28',
             days: '4',
             email: 'rahul.verma@email.com',
@@ -31,7 +50,7 @@ async function main() {
                 create: [
                     {
                         type: 'Departure',
-                        date: '2026-02-20',
+                        date: formatDate(rahulStart),
                         airline: 'IndiGo',
                         flightNumber: '6E-302',
                         flightTime: '08:00',
@@ -42,7 +61,7 @@ async function main() {
                     },
                     {
                         type: 'Return',
-                        date: '2026-02-24',
+                        date: formatDate(rahulEnd),
                         airline: 'Air India',
                         flightNumber: 'AI-854',
                         flightTime: '18:00',
@@ -57,8 +76,8 @@ async function main() {
                 create: [
                     {
                         hotelName: 'The Leela Goa',
-                        checkIn: '2026-02-20',
-                        checkOut: '2026-02-24',
+                        checkIn: formatDate(rahulStart),
+                        checkOut: formatDate(rahulEnd),
                         notes: 'Beachfront resort, breakfast included',
                         lat: 15.0007,
                         lng: 74.0047,
@@ -75,7 +94,7 @@ async function main() {
                                 { time: '10:00', title: 'Transfer to Hotel', location: 'The Leela Goa', notes: 'Private transfer arranged', status: 'completed', lat: 15.0007, lng: 74.0047, order: 1 },
                                 { time: '13:00', title: 'Lunch at Fisherman\'s Wharf', location: 'Fisherman\'s Wharf, Cavelossim', notes: 'Seafood restaurant on the backwaters', status: 'completed', lat: 15.1701, lng: 73.9477, order: 2 },
                                 { time: '16:00', title: 'Baga Beach Visit', location: 'Baga Beach, Goa', notes: 'Relax on the beach, sunset views', status: 'completed', lat: 15.5523, lng: 73.7513, order: 3 },
-                                { time: '20:00', title: 'Dinner at Tito\'s Street', location: 'Tito\'s Lane, Baga', notes: 'Famous nightlife area', status: 'completed', lat: 15.5535, lng: 73.7513, order: 4 },
+                                { time: '20:00', title: 'Dinner at Tito\'s Street', location: 'Tito\'s Lane, Baga', notes: 'Famous nightlife area', status: 'completed', lat: 15.5560, lng: 73.7516, order: 4 }, // Corrected: Tito's Lane coordinates
                             ],
                         },
                     },
@@ -84,10 +103,10 @@ async function main() {
                         activities: {
                             create: [
                                 { time: '09:00', title: 'Breakfast at Hotel', location: 'The Leela Goa', notes: 'Buffet breakfast', status: 'completed', lat: 15.0007, lng: 74.0047, order: 0 },
-                                { time: '10:30', title: 'Old Goa Heritage Walk', location: 'Old Goa, Goa', notes: 'Visit Basilica of Bom Jesus & Se Cathedral', status: 'completed', lat: 15.5012, lng: 73.9116, order: 1 },
+                                { time: '10:30', title: 'Old Goa Heritage Walk', location: 'Old Goa, Goa', notes: 'Visit Basilica of Bom Jesus & Se Cathedral', status: 'completed', lat: 15.5007, lng: 73.9116, order: 1 }, // Corrected: Old Goa coordinates
                                 { time: '13:30', title: 'Lunch at Ritz Classic', location: 'Panaji, Goa', notes: 'Classic Goan cuisine', status: 'completed', lat: 15.4989, lng: 73.8278, order: 2 },
-                                { time: '15:30', title: 'Anju Beach Resort & Spa', location: 'North Goa', status: 'upcoming', lat: 15.5535, lng: 73.7634, order: 3 },
-                                { time: '19:00', title: 'Sunset Cruise on Mandovi River', location: 'Mandovi River, Panaji', notes: 'Live Goan folk music & dance', status: 'upcoming', lat: 15.5012, lng: 73.8274, order: 4 },
+                                { time: '15:30', title: 'Anju Beach Resort & Spa', location: 'North Goa', status: 'upcoming', lat: 15.5730, lng: 73.7380, order: 3 }, // Corrected: Anjuna Beach area coordinates
+                                { time: '19:00', title: 'Sunset Cruise on Mandovi River', location: 'Mandovi River, Panaji', notes: 'Live Goan folk music & dance', status: 'upcoming', lat: 15.4909, lng: 73.8278, order: 4 }, // Corrected: Mandovi River jetty coordinates
                             ],
                         },
                     },
@@ -118,12 +137,17 @@ async function main() {
         },
     });
 
-    // ─── 2. Priya Sharma — Shimla + Manali (Upcoming) ──────────────────────────
+    // ─── 2. Priya Sharma — Shimla + Manali (Upcoming - Starts in 5 days) ──────────────────────────
+    const priyaStart = new Date(today);
+    priyaStart.setDate(today.getDate() + 5);
+    const priyaEnd = new Date(priyaStart);
+    priyaEnd.setDate(priyaStart.getDate() + 4);
+    
     await prisma.itinerary.create({
         data: {
             client: 'Priya Sharma',
             destination: 'Himachal Pradesh',
-            dateRange: 'Mar 10 - Mar 15',
+            dateRange: formatDateRange(priyaStart, priyaEnd),
             status: 'Upcoming',
             age: '32',
             days: '5',
@@ -139,7 +163,7 @@ async function main() {
                 create: [
                     {
                         type: 'Departure',
-                        date: '2026-03-10',
+                        date: formatDate(priyaStart),
                         airline: 'SpiceJet',
                         flightNumber: 'SG-113',
                         flightTime: '07:00',
@@ -150,7 +174,7 @@ async function main() {
                     },
                     {
                         type: 'Return',
-                        date: '2026-03-15',
+                        date: formatDate(priyaEnd),
                         airline: 'SpiceJet',
                         flightNumber: 'SG-114',
                         flightTime: '17:00',
@@ -165,16 +189,16 @@ async function main() {
                 create: [
                     {
                         hotelName: 'Wildflower Hall, Shimla',
-                        checkIn: '2026-03-10',
-                        checkOut: '2026-03-13',
+                        checkIn: formatDate(priyaStart),
+                        checkOut: formatDate(new Date(priyaStart.getTime() + 3 * 24 * 60 * 60 * 1000)),
                         notes: 'Mountain resort with scenic views',
                         lat: 31.1048,
                         lng: 77.0826,
                     },
                     {
                         hotelName: 'The Himalayan, Manali',
-                        checkIn: '2026-03-13',
-                        checkOut: '2026-03-15',
+                        checkIn: formatDate(new Date(priyaStart.getTime() + 3 * 24 * 60 * 60 * 1000)),
+                        checkOut: formatDate(priyaEnd),
                         notes: 'Luxury boutique hotel',
                         lat: 32.2396,
                         lng: 77.1887,
@@ -242,12 +266,17 @@ async function main() {
         },
     });
 
-    // ─── 3. Arjun Mehta — Kerala (Draft) ────────────────────────────────────────
+    // ─── 3. Arjun Mehta — Kerala (Draft - Starts in 15 days) ────────────────────────────────────────
+    const arjunStart = new Date(today);
+    arjunStart.setDate(today.getDate() + 15);
+    const arjunEnd = new Date(arjunStart);
+    arjunEnd.setDate(arjunStart.getDate() + 6);
+    
     await prisma.itinerary.create({
         data: {
             client: 'Arjun Mehta',
             destination: 'Kerala, India',
-            dateRange: 'Apr 5 - Apr 12',
+            dateRange: formatDateRange(arjunStart, arjunEnd),
             status: 'Draft',
             age: '45',
             days: '7',
@@ -263,7 +292,7 @@ async function main() {
                 create: [
                     {
                         type: 'Departure',
-                        date: '2026-04-05',
+                        date: formatDate(arjunStart),
                         airline: 'Vistara',
                         flightNumber: 'UK-805',
                         flightTime: '10:00',
@@ -274,7 +303,7 @@ async function main() {
                     },
                     {
                         type: 'Return',
-                        date: '2026-04-12',
+                        date: formatDate(arjunEnd),
                         airline: 'Vistara',
                         flightNumber: 'UK-806',
                         flightTime: '16:00',
@@ -289,16 +318,16 @@ async function main() {
                 create: [
                     {
                         hotelName: 'Taj Malabar Resort, Kochi',
-                        checkIn: '2026-04-05',
-                        checkOut: '2026-04-08',
+                        checkIn: formatDate(arjunStart),
+                        checkOut: formatDate(new Date(arjunStart.getTime() + 3 * 24 * 60 * 60 * 1000)),
                         notes: 'Heritage waterfront hotel',
                         lat: 9.9659,
                         lng: 76.2673,
                     },
                     {
                         hotelName: 'Taj Kumarakom Resort',
-                        checkIn: '2026-04-08',
-                        checkOut: '2026-04-12',
+                        checkIn: formatDate(new Date(arjunStart.getTime() + 3 * 24 * 60 * 60 * 1000)),
+                        checkOut: formatDate(arjunEnd),
                         notes: 'Backwater luxury resort',
                         lat: 9.5988,
                         lng: 76.4389,
@@ -389,14 +418,19 @@ async function main() {
         },
     });
 
-    console.log('✅ Seed complete — 3 itineraries created (Active, Upcoming, Draft)');
+    console.log('✅ Seed complete — 4 itineraries created with dynamic dates');
 
-    // ─── 4. Amit Patel — Rajasthan (Upcoming) ──────────────────────────────────
+    // ─── 4. Amit Patel — Rajasthan (Upcoming - Starts in 10 days) ──────────────────────────────────
+    const amitStart = new Date(today);
+    amitStart.setDate(today.getDate() + 10);
+    const amitEnd = new Date(amitStart);
+    amitEnd.setDate(amitStart.getDate() + 6);
+    
     await prisma.itinerary.create({
         data: {
             client: 'Amit Patel',
             destination: 'Rajasthan, India',
-            dateRange: 'Mar 20 - Mar 27',
+            dateRange: formatDateRange(amitStart, amitEnd),
             status: 'Upcoming',
             age: '35',
             days: '7',
@@ -412,7 +446,7 @@ async function main() {
                 create: [
                     {
                         type: 'Departure',
-                        date: '2026-03-20',
+                        date: formatDate(amitStart),
                         airline: 'Air India',
                         flightNumber: 'AI-472',
                         flightTime: '09:00',
@@ -423,7 +457,7 @@ async function main() {
                     },
                     {
                         type: 'Return',
-                        date: '2026-03-27',
+                        date: formatDate(amitEnd),
                         airline: 'Air India',
                         flightNumber: 'AI-473',
                         flightTime: '17:00',
@@ -438,16 +472,16 @@ async function main() {
                 create: [
                     {
                         hotelName: 'Rambagh Palace, Jaipur',
-                        checkIn: '2026-03-20',
-                        checkOut: '2026-03-24',
+                        checkIn: formatDate(amitStart),
+                        checkOut: formatDate(new Date(amitStart.getTime() + 4 * 24 * 60 * 60 * 1000)),
                         notes: 'Former royal palace, heritage property',
                         lat: 26.8975,
                         lng: 75.8151,
                     },
                     {
                         hotelName: 'Umaid Bhawan Palace, Jodhpur',
-                        checkIn: '2026-03-24',
-                        checkOut: '2026-03-27',
+                        checkIn: formatDate(new Date(amitStart.getTime() + 4 * 24 * 60 * 60 * 1000)),
+                        checkOut: formatDate(amitEnd),
                         notes: 'Luxury heritage palace hotel',
                         lat: 26.2965,
                         lng: 73.0387,

@@ -54,6 +54,7 @@ export async function GET(
             totalDays: it.totalDays,
             agentName: it.agentName,
             agentPhone: it.agentPhone,
+            issueSummary: it.issueSummary,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             itineraryDays: it.itineraryDays.map((day: any) => ({
                 id: day.id,
@@ -106,6 +107,7 @@ export async function PATCH(
             client: clientLong, destination: destinationLong, dateRange, status: statusLong,
             // Detail fields
             progress, age, days, email, mobile, origin, from, to, totalDays, agentName, agentPhone,
+            issueSummary,
         } = body;
 
         // Resolve with short keys taking priority over long keys
@@ -134,7 +136,8 @@ export async function PATCH(
                     to,
                     totalDays,
                     agentName,
-                    agentPhone
+                    agentPhone,
+                    issueSummary
                 },
             });
 
@@ -258,6 +261,7 @@ export async function PATCH(
             totalDays: ui.totalDays,
             agentName: ui.agentName,
             agentPhone: ui.agentPhone,
+            issueSummary: ui.issueSummary,
             flights: ui.flights,
             hotelStays: ui.hotelStays,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

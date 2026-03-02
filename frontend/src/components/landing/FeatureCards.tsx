@@ -1,33 +1,44 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Layers, Activity, Zap } from "lucide-react";
 
 const features = [
     {
-        icon: <Layers className="w-8 h-8 text-primary-600" />,
-        title: "Itinerary Builder",
-        description: "Build detailed day-by-day plans with ease. Drag, drop, and organize to create the perfect flow for your clients."
+        title: "Interactive Itinerary Builder",
+        description: "Build detailed day-by-day plans with ease. Add activities, flights, and hotels to create the perfect flow for your clients."
     },
     {
-        icon: <Activity className="w-8 h-8 text-primary-600" />,
-        title: "Trip Monitoring",
-        description: "Keep track of every active trip in real-time. Dashboard summaries help you stay ahead of any schedule changes."
+        title: "Live Client View & Maps",
+        description: "Share beautiful, mobile-friendly itineraries with your clients, complete with interactive real-time maps and routing."
     },
     {
-        icon: <Zap className="w-8 h-8 text-primary-600" />,
-        title: "Disruption Reporting",
-        description: "Quickly log and manage disruptions like flight delays or cancellations directly from the client view."
+        title: "Centralized Dashboard",
+        description: "Keep track of all your trips in one place. Monitor active trips, upcoming departures, and trips needing attention."
+    },
+    {
+        title: "Real-Time Alerts",
+        description: "Instantly notify clients of flight delays and manage live disruptions in one workspace."
+    },
+    {
+        title: "AI Resolution Engine",
+        description: "Our AI analyzes issues, suggests smart alternatives, and updates plans automatically."
+    },
+    {
+        title: "Smart Notifications",
+        description: "Clients and agents get instant status updates from pending to completely resolved."
     }
 ];
 
 export default function FeatureCards() {
     return (
-        <section className="py-24 bg-gray-50 relative z-10" id="features">
-            <div className="container px-4 md:px-6 mx-auto">
+        <section className="py-24 relative z-10 overflow-hidden" id="features">
+            {/* Blue Tone Overlay Gradient */}
+            <div className="absolute inset-0 bg-black/20 -z-10" />
+
+            <div className="container px-4 md:px-6 mx-auto relative z-20">
                 <div className="text-center mb-16">
-                    <h2 className="text-3xl font-bold text-gray-900 mb-4">Built for Real Travel Workflows</h2>
-                    <p className="text-gray-600 max-w-2xl mx-auto">Everything you need to manage trips professionally and efficiently.</p>
+                    <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-md">Built for Real Travel Workflows</h2>
+                    <p className="text-white/90 max-w-2xl mx-auto text-lg font-medium drop-shadow-sm">Everything you need to manage trips professionally and efficiently.</p>
                 </div>
 
                 <motion.div
@@ -40,13 +51,9 @@ export default function FeatureCards() {
                     {features.map((feature, index) => (
                         <div
                             key={index}
-                            className="bg-white p-8 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col items-start gap-4"
-                        >
-                            <div className="p-3 rounded-lg bg-primary-50">
-                                {feature.icon}
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">{feature.title}</h3>
-                            <p className="text-gray-600 leading-relaxed">
+                            className="h-full bg-black/30 backdrop-blur-md p-8 rounded-2xl border border-white/20 shadow-2xl hover: transition-all flex flex-col items-start gap-4 group">
+                            <h3 className="text-2xl font-bold text-white mb-2">{feature.title}</h3>
+                            <p className="text-white/80 leading-relaxed font-medium flex-grow">
                                 {feature.description}
                             </p>
                         </div>

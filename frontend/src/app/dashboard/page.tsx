@@ -8,7 +8,7 @@ export default function DashboardPage() {
     return (
         <div>
             {/* Header — title + new button only */}
-            <div className="flex justify-between items-center" style={{ marginBottom: 20 }}>
+            <div className="flex justify-between items-center" style={{ marginBottom: 32 }}>
                 <h1 style={{
                     fontSize: "var(--text-2xl)",
                     fontWeight: 700,

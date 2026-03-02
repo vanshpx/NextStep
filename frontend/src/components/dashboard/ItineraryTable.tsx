@@ -13,8 +13,42 @@ interface ItineraryTableProps {
     hideHeader?: boolean;
 }
 
+function parseDateRange(dateStr: string) {
+    if (!dateStr) return null;
+    const parts = dateStr.split(/[–-]/);
+    if (parts.length === 0) return null;
+    const start = new Date(parts[0].trim());
+    if (isNaN(start.getTime())) return null;
+
+    let end = start;
+    if (parts.length > 1) {
+        let endStr = parts[1].trim();
+        // If the right part format is just like "24, 2026", new Date doesn't like it.
+        // We'll trust basic `new Date` first
+        const parsedEnd = new Date(endStr);
+        if (!isNaN(parsedEnd.getTime())) {
+            end = parsedEnd;
+        } else {
+            // Maybe it's just a number like "24" or "24, 2026"
+            const dayMatch = endStr.match(/^\d+/);
+            if (dayMatch) {
+                end = new Date(start);
+                end.setDate(parseInt(dayMatch[0]));
+            }
+        }
+    }
+    return { start, end };
+}
+
+function parseSearchDate(query: string) {
+    // Format "feb23" -> "feb 23" to help Date parser
+    const spacedQuery = query.replace(/([a-zA-Z]+)(\d+)/g, '$1 $2');
+    const d = new Date(spacedQuery);
+    return isNaN(d.getTime()) ? null : d;
+}
+
 export default function ItineraryTable({ title = "Recent Itineraries", showViewAll = true, hideHeader = false }: ItineraryTableProps) {
-    const { itineraries, isLoading, deleteItinerary } = useItinerary();
+    const { itineraries, isLoading, deleteItinerary, searchQuery } = useItinerary();
     const [copiedId, setCopiedId] = useState<number | null>(null);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [statusFilter, setStatusFilter] = useState('All');
@@ -27,8 +61,35 @@ export default function ItineraryTable({ title = "Recent Itineraries", showViewA
     };
 
     const filteredItineraries = itineraries.filter(item => {
-        if (statusFilter === 'All') return true;
-        return item.status === statusFilter;
+        if (statusFilter !== 'All' && item.status !== statusFilter) return false;
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const qNoSpaces = q.replace(/\s+/g, '');
+            const matchesClient = item.c.toLowerCase().includes(q) || item.c.toLowerCase().replace(/\s+/g, '').includes(qNoSpaces);
+            const matchesDest = item.d.toLowerCase().includes(q) || item.d.toLowerCase().replace(/\s+/g, '').includes(qNoSpaces);
+            let matchesDate = item.date ? (item.date.toLowerCase().includes(q) || item.date.toLowerCase().replace(/\s+/g, '').includes(qNoSpaces)) : false;
+
+            // Try actual date overlap math if naive string matching failed
+            if (!matchesDate && item.date) {
+                const searchDate = parseSearchDate(searchQuery);
+                const range = parseDateRange(item.date);
+                if (searchDate && range) {
+                    const s = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate());
+                    const e = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate());
+                    const t = new Date(searchDate.getFullYear(), searchDate.getMonth(), searchDate.getDate());
+
+                    // Allow match if it falls anywhere between start and end (inclusive)
+                    if (t.getTime() >= s.getTime() && t.getTime() <= e.getTime()) {
+                        matchesDate = true;
+                    }
+                }
+            }
+
+            if (!matchesClient && !matchesDest && !matchesDate) return false;
+        }
+
+        return true;
     });
 
     if (isLoading) {
@@ -45,7 +106,7 @@ export default function ItineraryTable({ title = "Recent Itineraries", showViewA
         <div style={{ background: "var(--card-bg)", borderRadius: 10, border: "1px solid var(--card-border)", overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
             {!hideHeader && (
                 <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--card-border)", display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{title}</h3>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", margin: 0, fontFamily: "var(--font-poppins), sans-serif" }}>{title}</h3>
 
                     <div style={{ display: "flex", gap: 2, background: "var(--page-bg)", padding: "3px", borderRadius: 6, border: "1px solid var(--card-border)" }}>
                         {tabs.map(tab => (

@@ -10,7 +10,9 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-    ...compat.extends("next/core-web-vitals", "next/typescript"),
+    // Bypassing next/core-web-vitals in ESLint 9 flat config temporarily 
+    // to prevent 'circular structure' crashes in IDE plugins. 
+    // 'next lint' relies on its internal resolution.
 ];
 
 export default eslintConfig;

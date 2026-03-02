@@ -27,6 +27,7 @@ model Itinerary {
   totalDays     Int?
   agentName     String?
   agentPhone    String?
+  issueSummary  String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

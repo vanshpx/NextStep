@@ -15,7 +15,7 @@ export default function StatsGrid() {
     const drafts = itineraries.filter(i => i.status === 'Draft').length;
 
     const stats = [
-        { label: "Total Itineraries", value: total.toString(), icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+        { label: "Total Itineraries", value: total.toString(), icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
         { label: "Active Trips", value: active.toString(), icon: Plane, color: "text-cyan-600", bg: "bg-cyan-50" },
         { label: "Upcoming", value: upcoming.toString(), icon: CheckCircle, color: "text-indigo-600", bg: "bg-indigo-50" },
         { label: "Completed", value: completed.toString(), icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" },
