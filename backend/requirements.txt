@@ -1,5 +1,14 @@
+# ── Core ──────────────────────────────────────────────────────────────────────
 pydantic>=2.0.0
 python-dotenv
-openai
 fastapi
-uvicorn
+uvicorn[standard]
+
+# ── LLM ──────────────────────────────────────────────────────────────────────
+google-genai                     # Gemini SDK (only needed when USE_STUB_LLM=false)
+
+# ── Database (optional — only for migration scripts) ─────────────────────────
+psycopg2-binary                  # PostgreSQL driver
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest

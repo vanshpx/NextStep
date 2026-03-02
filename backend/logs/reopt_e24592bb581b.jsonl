@@ -1,2 +1,0 @@
-{"timestamp": "2026-02-28T23:12:26.072399+00:00", "session_id": "reopt_e24592bb581b", "event_type": "USER_COMMAND", "payload": {"command": "q", "parsed_type": "q"}}
-{"timestamp": "2026-02-28T23:12:26.073384+00:00", "session_id": "reopt_e24592bb581b", "event_type": "SESSION_END", "payload": {}}
